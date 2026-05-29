@@ -55,6 +55,11 @@ pipeline_cache.bin
 
 extract
 
+# Switch port screenshots/captures (large, non-essential)
+platforms/switch/*.png
+!platforms/switch/icon.png
+platforms/switch/m1_eden_capture.*
+
 # Claude Code — local/private artifacts only.
 # Tracked: anything you put under .claude/agents/, .claude/commands/, or a
 # shared .claude/settings.json. Project-level config goes in repo-root
