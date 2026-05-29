@@ -15,6 +15,34 @@
 #include <string>
 
 namespace dusk::ui {
+
+// Public helpers (kept outside the anonymous namespace below so other TUs
+// — e.g. m_Do_main.cpp during boot — can resolve dusk::ui::internal_resolution_scale).
+namespace {
+struct InternalResolutionPreset_ {
+    const char* label;
+    float scale;
+    int width;
+    int height;
+};
+inline const InternalResolutionPreset_& internal_resolution_preset_locked(int value) {
+    static constexpr InternalResolutionPreset_ kPresets[] = {
+        { "Auto",  0.0f,   0,    0 },
+        { "360p",  0.5f,   640,  360 },
+        { "480p",  0.667f, 854,  480 },
+        { "720p",  1.0f,   1280, 720 },
+        { "1080p", 1.5f,   1920, 1080 },
+        { "1440p", 2.0f,   2560, 1440 },
+        { "4K",    3.0f,   3840, 2160 },
+    };
+    const int max_idx = static_cast<int>(sizeof(kPresets) / sizeof(kPresets[0])) - 1;
+    return kPresets[std::clamp(value, 0, max_idx)];
+}
+}  // namespace
+float internal_resolution_scale(int value) {
+    return internal_resolution_preset_locked(value).scale;
+}
+
 namespace {
 
 const Rml::String kDocumentSource = R"RML(
@@ -62,7 +90,7 @@ void set_value(GraphicsOption option, int value) {
     switch (option) {
     case GraphicsOption::InternalResolution:
         getSettings().game.internalResolutionScale.setValue(value);
-        VISetFrameBufferScale(static_cast<float>(value));
+        VISetFrameBufferScale(internal_resolution_scale(value));
         break;
     case GraphicsOption::ShadowResolution:
         getSettings().game.shadowResolutionMultiplier.setValue(value);
@@ -190,14 +218,14 @@ void SteppedCarousel::apply(int value) {
 Rml::String format_graphics_setting_value(GraphicsOption option, int value) {
     switch (option) {
     case GraphicsOption::InternalResolution: {
-        u32 width = 0;
-        u32 height = 0;
-        AuroraGetRenderSize(&width, &height);
+        const auto& preset = internal_resolution_preset_locked(value);
         if (value <= 0) {
+            u32 width = 0;
+            u32 height = 0;
+            AuroraGetRenderSize(&width, &height);
             return fmt::format("Auto ({}×{})", width, height);
-        } else {
-            return fmt::format("{}× ({}×{})", value, width, height);
         }
+        return fmt::format("{} ({}×{})", preset.label, preset.width, preset.height);
     }
     case GraphicsOption::ShadowResolution:
         return fmt::format("{}×", value);

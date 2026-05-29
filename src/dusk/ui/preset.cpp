@@ -56,6 +56,10 @@ void applyPresetDusk() {
 
 }  // namespace
 
+void apply_preset_dusk_silently() {
+    applyPresetDusk();
+}
+
 PresetWindow::PresetWindow() : WindowSmall("modal", "modal-dialog") {
     mDialog->SetClass("modal-dialog", true);
 

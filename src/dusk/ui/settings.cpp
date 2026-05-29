@@ -803,7 +803,7 @@ SettingsWindow::SettingsWindow(bool prelaunch) : mPrelaunch(prelaunch) {
                 .title = "Internal Resolution",
                 .helpText = kInternalResolutionHelpText,
                 .valueMin = 0,
-                .valueMax = 12,
+                .valueMax = 6,  // 0=Auto, 1=360p, 2=480p, 3=720p, 4=1080p, 5=1440p, 6=4K
                 .defaultValue = 0,
             }, mPrelaunch);
         graphics_tuner_control(*this, leftPane, rightPane,

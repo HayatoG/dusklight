@@ -50,6 +50,11 @@ enum class GraphicsOption {
 
 Rml::String format_graphics_setting_value(GraphicsOption option, int value);
 
+// Maps the InternalResolution preset index (0-6) to the VISetFrameBufferScale
+// multiplier. 0 = Auto (no scaling), 1 = 360p, 2 = 480p, 3 = 720p,
+// 4 = 1080p, 5 = 1440p, 6 = 4K. Defined in graphics_tuner.cpp.
+float internal_resolution_scale(int value);
+
 struct GraphicsTunerProps {
     GraphicsOption option;
     Rml::String title;

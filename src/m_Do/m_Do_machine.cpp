@@ -1012,6 +1012,10 @@ int mDoMch_Create() {
     mDoDvdErr_ThdInit();
 
 #if TARGET_PC
+    // Note: ThdInit may also be invoked from the Dusk launcher's Play button
+    // (src/dusk/ui/prelaunch.cpp:715). ThdInit itself carries a
+    // `sAlreadyInited` static guard so the second call here short-circuits
+    // safely; see the comment at the top of `mDoMemCd_Ctrl_c::ThdInit`.
     if (!dusk::ui::is_prelaunch_open()) {
         mDoMemCd_ThdInit();
     }

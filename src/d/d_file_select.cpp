@@ -5,6 +5,9 @@
 
 #include "d/dolzel.h"  // IWYU pragma: keep
 
+#ifdef __SWITCH__
+#include <sys/stat.h>
+#endif
 #include "JSystem/J2DGraph/J2DAnmLoader.h"
 #include "JSystem/J2DGraph/J2DTextBox.h"
 #include "JSystem/J3DGraphAnimator/J3DMaterialAnm.h"
@@ -4278,6 +4281,13 @@ void dFile_select_c::MemCardStatCheck() {
     if (status == 14) {
         return;
     }
+
+    // 2026-05-28: Switch build defines VERSION=0 (VERSION_GCN_USA), so
+    // PLATFORM_GCN below is TRUE — the GCN switch table handles status
+    // correctly. Aurora's memcard emulator writes/reads
+    // `sdmc:/aurora/USA/Card A/01-GZ2E-gczelda2.gci`. Earlier attempts to
+    // route to a Wii-style NAND file were wrong (the Wii path is gated
+    // `#if PLATFORM_WII||SHIELD` and never compiles on our build).
 
 #if PLATFORM_GCN
     switch (status) {

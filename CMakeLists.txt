@@ -11,7 +11,6 @@ if (DUSK_VERSION_OVERRIDE)
     set(DUSK_WC_DESCRIBE "${DUSK_VERSION_OVERRIDE}")
     set(DUSK_VERSION_STRING "0.0.0.0")
     set(DUSK_SHORT_VERSION_STRING "0.0.0")
-    set(DUSK_VERSION_CODE "1")
     set(DUSK_WC_REVISION "")
     set(DUSK_WC_BRANCH "")
     set(DUSK_WC_DATE "")
@@ -62,9 +61,6 @@ endif ()
 
 if (DUSK_WC_DESCRIBE MATCHES "^v([0-9]+)\\.([0-9]+)\\.([0-9]+)([-+].*)?$")
     set(DUSK_SHORT_VERSION_STRING "${CMAKE_MATCH_1}.${CMAKE_MATCH_2}.${CMAKE_MATCH_3}")
-    set(_ver_major ${CMAKE_MATCH_1})
-    set(_ver_minor ${CMAKE_MATCH_2})
-    set(_ver_patch ${CMAKE_MATCH_3})
     set(DUSK_VERSION_TWEAK "0")
     if (DUSK_WC_DESCRIBE MATCHES "^v[0-9]+\\.[0-9]+\\.[0-9]+-([0-9]+)(-dirty)?$")
         set(DUSK_VERSION_TWEAK "${CMAKE_MATCH_1}")
@@ -72,19 +68,10 @@ if (DUSK_WC_DESCRIBE MATCHES "^v([0-9]+)\\.([0-9]+)\\.([0-9]+)([-+].*)?$")
         set(DUSK_VERSION_TWEAK "${CMAKE_MATCH_1}")
     endif ()
     set(DUSK_VERSION_STRING "${DUSK_SHORT_VERSION_STRING}.${DUSK_VERSION_TWEAK}")
-    if(DUSK_VERSION_TWEAK GREATER 999)
-        set(_tweak 999)
-    else()
-        set(_tweak ${DUSK_VERSION_TWEAK})
-    endif()
-    # encoding: major*1e7 + minor*1e5 + patch*1e3 + tweak; collision-free for major<210, minor<100, patch<100, tweak<=999
-    math(EXPR DUSK_VERSION_CODE
-        "${_ver_major} * 10000000 + ${_ver_minor} * 100000 + ${_ver_patch} * 1000 + ${_tweak}")
 else ()
     set(DUSK_WC_DESCRIBE "UNKNOWN-VERSION")
     set(DUSK_VERSION_STRING "0.0.0.0")
     set(DUSK_SHORT_VERSION_STRING "0.0.0")
-    set(DUSK_VERSION_CODE "1")
 endif ()
 
 endif ()
@@ -92,7 +79,6 @@ endif ()
 # Add version information to CI environment variables
 if(DEFINED ENV{GITHUB_ENV})
     file(APPEND "$ENV{GITHUB_ENV}" "DUSK_VERSION=${DUSK_WC_DESCRIBE}\n")
-    file(APPEND "$ENV{GITHUB_ENV}" "DUSK_VERSION_CODE=${DUSK_VERSION_CODE}\n")
 endif()
 message(STATUS "Dusklight version set to ${DUSK_WC_DESCRIBE}")
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
@@ -100,8 +86,6 @@ project(dusklight LANGUAGES C CXX VERSION ${DUSK_VERSION_STRING})
 if (APPLE)
     enable_language(OBJC OBJCXX)
 endif ()
-# Adjust CMAKE_SYSTEM_PROCESSOR on Windows to match compiler target
-include(cmake/WindowsTargetProcessor.cmake)
 if (APPLE AND NOT TVOS AND CMAKE_SYSTEM_NAME STREQUAL tvOS)
     # ios.toolchain.cmake hack for SDL
     set(TVOS ON)
@@ -131,7 +115,9 @@ if (CMAKE_SYSTEM_NAME STREQUAL Linux)
 endif ()
 set(AURORA_ENABLE_DVD ON CACHE BOOL "Enable DVD API support" FORCE)
 set(AURORA_ENABLE_CARD ON CACHE BOOL "Enable CARD API support" FORCE)
-set(AURORA_ENABLE_RMLUI ON CACHE BOOL "Enable RmlUi UI support" FORCE)
+if (NOT AURORA_PLATFORM_SWITCH)
+    set(AURORA_ENABLE_RMLUI ON CACHE BOOL "Enable RmlUi UI support" FORCE)
+endif ()
 add_subdirectory(extern/aurora EXCLUDE_FROM_ALL)
 target_compile_definitions(aurora_mtx PRIVATE MTX_USE_PS=1)
 
@@ -170,7 +156,6 @@ if (DUSK_MOVIE_SUPPORT)
         endif ()
         set(_jpeg_cmake_args
             -DCMAKE_INSTALL_PREFIX=${_jpeg_install_dir}
-            -DCMAKE_PROJECT_INCLUDE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/WindowsTargetProcessor.cmake
             -DENABLE_SHARED=OFF
             -DWITH_TURBOJPEG=ON
             -DWITH_JAVA=OFF
@@ -219,9 +204,10 @@ if (CMAKE_SYSTEM_NAME STREQUAL Linux)
     # -Wno-multichar: Multi-character constants ('ABCD') are implementation-defined but all compilers
     #   (CW, GCC, Clang, MSVC) encode them identically in big-endian order.
     #   For >4-char literals (which GCC/Clang truncate to int), use the MULTI_CHAR() macro.
+    # -Wwrite-strings: Game code relies on implicit const char* -> char* conversions
     # -Wdeprecated-declarations: JSystem uses std::iterator, deprecated in C++17
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-multichar")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-multichar -Wno-trigraphs -Wno-deprecated-declarations")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-multichar -Wno-write-strings")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-multichar -Wno-write-strings -Wno-trigraphs -Wno-deprecated-declarations")
     set(CMAKE_INSTALL_RPATH "$ORIGIN")
     set(CMAKE_BUILD_RPATH "$ORIGIN")
 elseif (APPLE)
@@ -231,6 +217,7 @@ elseif (APPLE)
 elseif (MSVC)
     add_compile_options(
         $<$<COMPILE_LANGUAGE:C,CXX>:/bigobj>
+        $<$<COMPILE_LANGUAGE:C,CXX>:/Zc:strictStrings->
         $<$<COMPILE_LANGUAGE:C,CXX>:/MP>
         $<$<COMPILE_LANGUAGE:C,CXX>:/FS>
     )
@@ -327,6 +314,21 @@ set(DUSK_COPYRIGHT "Copyright (C) Twilit Realm contributors")
 source_group("dolzel" FILES ${DOLZEL_FILES} ${Z2AUDIOLIB_FILES} ${REL_FILES})
 source_group("dusklight" FILES ${DUSK_FILES} ${DUSK_HTTP_BACKEND_FILES})
 
+# FIXME(switch-port): TARGET_PC is defined unconditionally and INCLUDES the
+# Switch build. The codebase has ~140 `#if TARGET_PC` and ~86
+# `#if PLATFORM_WII || PLATFORM_SHIELD` blocks; on Switch we hit:
+#   - every `#if TARGET_PC` branch (because TARGET_PC=1 here)
+#   - none of the WII/SHIELD branches (because both undefined)
+# This is the source of multiple Switch-only crashes — most recently the
+# double-mDoMemCd_ThdInit (see m_Do_machine.cpp:1024 comment and the
+# [[dusklight-debugging-heuristics]] memory). Long-term fix is a dedicated
+# `TARGET_SWITCH` macro and migrating Switch-relevant `#if TARGET_PC`
+# branches to `#if TARGET_PC && !defined(__SWITCH__)` or a fresh
+# `#if defined(__SWITCH__)` branch. Audit + migration plan:
+# platforms/switch/PLAN_TARGET_PC_AUDIT.md. Until then, anywhere we need to
+# exclude PC-specific code on Switch, use `#ifndef __SWITCH__` (devkitA64
+# defines __SWITCH__), NEVER `#if !TARGET_PC` (which is always false on the
+# Switch build).
 set(GAME_COMPILE_DEFS TARGET_PC WIDESCREEN_SUPPORT=1 AVOID_UB=1 VERSION=0 MTX_USE_PS=1)
 
 set(GAME_INCLUDE_DIRS
@@ -339,12 +341,32 @@ set(GAME_INCLUDE_DIRS
     extern
     ${CMAKE_BINARY_DIR})
 
+if (AURORA_PLATFORM_SWITCH)
+    # Switch: pull in portlibs (libpng, zstd, etc.) + aurora's Tracy stub dir
+    # + our SDL3 shim location + aurora's SDL3 stub headers (dusk audio includes <SDL3/SDL_audio.h>
+    # which Dan's aurora-switch ships as a no-op shim alongside the libnx/NWindow backend).
+    list(APPEND GAME_INCLUDE_DIRS
+        $ENV{DEVKITPRO}/portlibs/switch/include
+        extern/aurora/include
+        extern/aurora/lib/switch/tracy_stub
+        platforms/switch/src)
+endif ()
+
 find_package(Threads REQUIRED)
 set(GAME_LIBS aurora::core aurora::gx aurora::gd aurora::si aurora::vi aurora::pad aurora::mtx aurora::os aurora::dvd
     aurora::card freeverb cxxopts::cxxopts absl::flat_hash_map nlohmann_json::nlohmann_json TracyClient fmt::fmt
     Threads::Threads)
 
-list(APPEND GAME_LIBS libzstd_static)
+if (AURORA_PLATFORM_SWITCH)
+    # devkitPro portlib provides libzstd.a (linked as `zstd`)
+    list(APPEND GAME_LIBS zstd)
+    # M-DV-2 NVK-Vulkan path: Mesa util deps only (expat). NO EGL/GLESv2/glapi/drm_nouveau --
+    # the GLES backend is off and our NVK winsys (drm_shim, baked into libvulkan.a) replaces
+    # libdrm_nouveau. The NVK driver archive itself is --whole-archive'd at the final link below.
+    list(APPEND GAME_LIBS expat)
+else ()
+    list(APPEND GAME_LIBS libzstd_static)
+endif ()
 
 if (DUSK_ENABLE_SENTRY_NATIVE)
     list(APPEND GAME_LIBS sentry)
@@ -353,10 +375,6 @@ endif ()
 
 if (WIN32)
     list(APPEND GAME_LIBS Ws2_32)
-    if (CMAKE_BUILD_TYPE STREQUAL Debug)
-        list(APPEND GAME_LIBS dbghelp)
-        list(APPEND GAME_COMPILE_DEFS DUSK_CRASH_DBGHELP=1)
-    endif ()
 endif ()
 
 set(DUSK_HTTP_BACKEND_SOURCE src/dusk/http/no_backend.cpp)
@@ -463,9 +481,44 @@ if (CMAKE_CXX_LINK_GROUP_USING_RESCAN_SUPPORTED OR CMAKE_LINK_GROUP_USING_RESCAN
     # GNU ld resolves static archives in a single left-to-right pass. The split
     # JSystem libraries reference each other, so they need a RESCAN group there.
     set(JSYSTEM_LINK_LIBRARIES "$<LINK_GROUP:RESCAN,${JSYSTEM_LIBRARIES}>")
+elseif (AURORA_PLATFORM_SWITCH)
+    # devkitA64 GCC 15 doesn't advertise LINK_GROUP RESCAN; fall back to raw
+    # --start-group/--end-group so cross-archive symbols resolve.
+    set(JSYSTEM_LINK_LIBRARIES
+        "-Wl,--start-group" ${JSYSTEM_LIBRARIES} "-Wl,--end-group")
 endif ()
 
 set(DUSK_FILES src/dusk/main.cpp ${GAME_BASE_FILES} ${GAME_DEBUG_FILES})
+
+if (AURORA_PLATFORM_SWITCH)
+    # PC-only sources: SDL3 audio, ImGui SDL backend, host file dialogs.
+    # Functional replacements would come from a libnx-native layer.
+    # Until then we provide empty stubs in platforms/switch/src/switch_stubs.cpp.
+    list(FILTER DUSK_FILES EXCLUDE REGEX "src/dusk/audio/")
+    list(FILTER DUSK_FILES EXCLUDE REGEX "src/dusk/imgui/")
+    # src/dusk/ui/* is mostly RmlUi (Aurora-switch builds with RmlUi=ON) plus a
+    # handful of SDL3/ImGui calls that go through our shims. Keep it IN to
+    # provide the dusk::ui::{push_document,push_toast,Document,MenuBar,Overlay,
+    # Prelaunch,PresetWindow} symbols referenced by m_Do_main / achievements.
+    list(FILTER DUSK_FILES EXCLUDE REGEX "src/dusk/file_select(\\.cpp|\\.hpp)")
+    list(FILTER DUSK_FILES EXCLUDE REGEX "src/dusk/iso_validate")
+    list(FILTER DUSK_FILES EXCLUDE REGEX "src/dusk/autosave\\.cpp")
+    list(FILTER DUSK_FILES EXCLUDE REGEX "src/dusk/gyro\\.cpp")
+    # crash_handler.cpp uses <dlfcn.h>/<unwind.h>/<link.h> POSIX symbols not in
+    # newlib; switch_stubs.cpp provides install() as a no-op (libnx handles
+    # crashes via __wrap_abort + dusk_terminate_handler + stderr→file).
+    list(FILTER DUSK_FILES EXCLUDE REGEX "src/dusk/crash_handler\\.cpp")
+    # NOTE: OSThread.cpp re-included — provides OS* thread API used everywhere.
+    # Re-include audio files that have no SDL3/PC deps and provide JSystem
+    # symbols that the filter wrongly excluded:
+    #   JASCriticalSection.cpp — uses <mutex> + Tracy, provides JAudio mutex ctor/dtor
+    #   DspStub.cpp            — pure stub for missing dspproc.cpp, provides DsetMixerLevel etc.
+    list(APPEND DUSK_FILES
+        src/dusk/audio/JASCriticalSection.cpp
+        src/dusk/audio/DspStub.cpp
+        platforms/switch/src/switch_stubs.cpp)
+endif ()
+
 if(ANDROID)
     add_library(dusklight SHARED ${DUSK_FILES})
     set_target_properties(dusklight PROPERTIES OUTPUT_NAME main)
@@ -477,6 +530,22 @@ target_compile_definitions(dusklight PRIVATE ${GAME_COMPILE_DEFS})
 target_include_directories(dusklight PRIVATE ${GAME_INCLUDE_DIRS})
 target_link_libraries(dusklight PRIVATE aurora::main ${GAME_LIBS} ${JSYSTEM_LINK_LIBRARIES})
 target_precompile_headers(dusklight PRIVATE "$<$<COMPILE_LANGUAGE:CXX>:${CMAKE_SOURCE_DIR}/include/dusk_pch.hpp>")
+
+if (AURORA_PLATFORM_SWITCH AND NOT AURORA_BACKEND_DEKO3D AND NOT AURORA_BACKEND_GLES AND NOT AURORA_BACKEND_DAWN_GL)
+    # M-DV-2 NVK-Vulkan final link. Our NVK driver (DAWN_SWITCH_NVK_LIBRARY, set by aurora_core.cmake)
+    # MUST be --whole-archive: Mesa's entrypoint dispatch uses WEAK symbols; on-demand archive pull
+    # leaves null dispatch entries -> wsi_device_init calls a null proc -> Instruction Abort.
+    # The winsys shim baked into it needs the open/close/stat/lstat wraps + the loaderless
+    # vk_icdGetInstanceProcAddr wrap (services vkEnumerateInstanceLayerProperties; see switch-nvk
+    # winsys/nvk_loaderless_shim.c). Recipe proven by the standalone dawn_switch_clear NRO (M-DV-1).
+    target_link_options(dusklight PRIVATE
+        -Wl,--allow-multiple-definition
+        -Wl,--wrap=open -Wl,--wrap=close -Wl,--wrap=stat -Wl,--wrap=lstat
+        -Wl,--wrap=vk_icdGetInstanceProcAddr
+        # diagnostics: log who calls abort() (NVK/NAK panic asserts -> User Break) before breaking.
+        -Wl,--wrap=abort
+        -Wl,--whole-archive "${DAWN_SWITCH_NVK_LIBRARY}" -Wl,--no-whole-archive)
+endif ()
 if (TARGET crashpad_handler)
     add_dependencies(dusklight crashpad_handler)
     add_custom_command(TARGET dusklight POST_BUILD
@@ -491,10 +560,6 @@ if (ANDROID)
     # SDLActivity loads SDL_main via dlsym on Android. Since aurora::main is a static
     # archive, force an undefined reference so the linker keeps the SDL_main object.
     target_link_options(dusklight PRIVATE "-Wl,-u,SDL_main")
-endif ()
-
-if (CMAKE_SYSTEM_NAME STREQUAL Linux)
-    target_link_options(dusklight PRIVATE "-Wl,--build-id=sha1")
 endif ()
 
 if (NOT APPLE)

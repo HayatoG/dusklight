@@ -1,0 +1,16 @@
+build/
+*.nro
+*.nacp
+*.elf
+*.map
+_*.png
+
+# Vendored reference clones (not ours, too large to track)
+reference/
+
+# Vendored Vulkan SDK headers + libvulkan (~22MB, see build-docker.sh for source)
+stub-nvk/
+
+# Build artifacts
+build-switch/
+*.so

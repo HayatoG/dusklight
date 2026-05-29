@@ -40,9 +40,20 @@ static void ReplaceFile(const std::filesystem::path& source, const std::filesyst
     std::error_code ec;
     std::filesystem::rename(source, target, ec);
     if (ec) {
-        const auto renameError = ec;
-        std::filesystem::remove(source, ec);
-        throw std::system_error(renameError);
+        // libnx FsFs rename refuses to overwrite an existing target ("File exists").
+        // Standard POSIX rename overwrites; we emulate by removing the target then
+        // retrying. The fallback is safe on every platform — only the brief race
+        // between remove and rename differs, which doesn't matter for the Dusklight
+        // config (single-writer).
+        std::error_code removeEc;
+        std::filesystem::remove(target, removeEc);
+        std::error_code retryEc;
+        std::filesystem::rename(source, target, retryEc);
+        if (retryEc) {
+            const auto retryError = retryEc;
+            std::filesystem::remove(source, ec);
+            throw std::system_error(retryError);
+        }
     }
 }
 

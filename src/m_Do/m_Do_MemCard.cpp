@@ -77,6 +77,26 @@ static u8 MemCardStack[STACK_SIZE];
 static OSThread MemCardThread;
 
 void mDoMemCd_Ctrl_c::ThdInit() {
+    // Idempotency guard: ThdInit is called from BOTH the Dusk launcher's Play
+    // button (src/dusk/ui/prelaunch.cpp:715) AND mDoMch_Create
+    // (src/m_Do/m_Do_machine.cpp ~1024 in the `#if TARGET_PC` branch). The
+    // launcher's pre-existing `mCardCommand == COMM_NONE_e` guard is unsafe
+    // because the worker thread resets mCardCommand back to COMM_NONE_e
+    // after processing the launcher-posted COMM_ATTACH_e (which falls through
+    // on Switch because that case is `#if PLATFORM_GCN || PLATFORM_WII`), so
+    // by the time mDoMch_Create runs the guard appears reset. The second
+    // OSCreateThread call ends up doing `unordered_map[thread] = std::move(...)`
+    // on a live entry; the existing PCThreadData's `std::thread` is joinable
+    // and `~PCThreadData` only detaches if `dusk::IsShuttingDown`, so its
+    // destructor termiantes via `std::thread::~thread()` → std::terminate
+    // → abort. See [[dusklight-debugging-heuristics]] #2 and the new
+    // anti-pattern about std::thread joinable-on-destroy.
+    static bool sAlreadyInited = false;
+    if (sAlreadyInited) {
+        return;
+    }
+    sAlreadyInited = true;
+
     #if !PLATFORM_SHIELD
     CARDSetLoadType((CARDFileType)dusk::getSettings().backend.cardFileType.getValue());
 

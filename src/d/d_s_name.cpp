@@ -23,7 +23,14 @@
 #include "m_Do/m_Do_mtx.h"
 #include <dusk/autosave.h>
 
-#if TARGET_PC
+#if defined(__SWITCH__)
+// Switch: brightness/TV-settings check UI isn't wired (no J2D input path, BLO
+// not loaded by aurora). The screen rendered black forever, freezing the flow
+// FileSelectMain -> FileSelectClose -> BrightCheckOpen -> brightCheck (waiting
+// on user confirmation that never reaches the engine). Force-skip so the flow
+// goes FileSelectClose -> doPreLoadSetup -> changeGameScene -> PLAY_SCENE_e.
+#define SHOW_TV_SETTINGS_SCREEN (0)
+#elif TARGET_PC
 #define SHOW_TV_SETTINGS_SCREEN (this->mShowTvSettingsScreen)
 #else
 #define SHOW_TV_SETTINGS_SCREEN (1)

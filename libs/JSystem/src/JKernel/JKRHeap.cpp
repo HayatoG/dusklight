@@ -42,7 +42,16 @@ JKRHeap* JKRHeap::sSystemHeap;
 // We can't do this as we're (currently) using true OS threads. So use a true thread local.
 // On Linux/GCC, thread_local in a shared library requires global-dynamic TLS model
 // (the default local-exec is incompatible with -fPIC). MSVC and macOS/Clang handle this automatically.
-#if defined(__GNUC__) && !defined(__clang__) && !defined(_MSC_VER)
+//
+// On Switch (devkitA64 + libnx), global-dynamic is BROKEN: there's no
+// __tls_get_addr / DTV in libnx's runtime, so global-dynamic resolves to 0x0
+// (null deref) the first time sCurrentHeap is touched in JKRHeap::becomeCurrentHeap.
+// initial-exec resolves at process load via the static TLS template (TLS offset
+// baked into the binary), which libnx DOES handle. See dusklight debugging
+// heuristic #18.
+#if defined(__SWITCH__)
+#define TLS_GLOBAL_DYNAMIC __attribute__((tls_model("initial-exec")))
+#elif defined(__GNUC__) && !defined(__clang__) && !defined(_MSC_VER)
 #define TLS_GLOBAL_DYNAMIC __attribute__((tls_model("global-dynamic")))
 #else
 #define TLS_GLOBAL_DYNAMIC

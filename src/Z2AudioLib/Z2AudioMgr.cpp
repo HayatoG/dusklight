@@ -213,18 +213,28 @@ bool Z2AudioMgr::hasReset() const {
 
 bool Z2AudioMgr::startSound(JAISoundID soundID, JAISoundHandle* handle,
                             const JGeometry::TVec3<f32>* posPtr) {
+#if DUSK_AUDIO_DISABLED
+    // No JAUSoundTable instance on Switch -> Z2SoundInfo::getSwBit derefs
+    // uninitialized field_0x0 in JAUSoundTable::getData. Skip the whole call.
+    return 0;
+#else
     if (mResettingFlag) {
         return 0;
     }
 
     return mSoundMgr.startSound(soundID, handle, posPtr);
+#endif
 }
 
 bool Z2AudioMgr::startLevelSound(JAISoundID soundID, JAISoundHandle* handle,
                                  const JGeometry::TVec3<f32>* posPtr) {
+#if DUSK_AUDIO_DISABLED
+    return 0;
+#else
     if (mResettingFlag) {
         return 0;
     }
 
     return mSoundMgr.startSound(soundID, handle, posPtr);
+#endif
 }

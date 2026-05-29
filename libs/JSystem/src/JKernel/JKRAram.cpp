@@ -135,6 +135,16 @@ void JKRAram::checkOkAddress(u8* addr, u32 size, JKRAramBlock* block, u32 param_
 
 void JKRAram::changeGroupIdIfNeed(u8* data, int groupId) {
     JKRHeap* currentHeap = JKRGetCurrentHeap();
+#ifdef __SWITCH__
+    // sCurrentHeap is a thread_local on Switch (`tls_model("initial-exec")`).
+    // When this is invoked from a thread whose TLS slot was never set —
+    // e.g. the J2D animation update running off the DVD/audio worker
+    // queues — getCurrentHeap returns NULL and the cast below null-derefs.
+    // Per-site guard per [[dusklight-debugging-heuristics]] #17 (a global
+    // root-heap fallback regressed graphics init pre-reset, so the
+    // recommended fix is to bail at each leaf site).
+    if (currentHeap == NULL) return;
+#endif
     if (currentHeap->getHeapType() == 'EXPH' && groupId >= 0) {
         JKRExpHeap::CMemBlock* block = (JKRExpHeap::CMemBlock*)(data - sizeof(JKRExpHeap::CMemBlock));
         block->newGroupId(groupId);

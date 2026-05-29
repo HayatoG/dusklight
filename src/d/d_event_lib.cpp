@@ -9,6 +9,12 @@
 #include "d/d_com_inf_game.h"
 #include "f_op/f_op_actor.h"
 
+// See d_event_lib.h: newlib defines _C as 0x40 via <ctype.h>. Undo it inside
+// this TU so the `_C` struct-member references in the method bodies below
+// don't expand to a numeric literal.
+#pragma push_macro("_C")
+#undef _C
+
 bool dEvLib_callback_c::eventUpdate() {
     if (mAction == NULL) {
         return FALSE;
@@ -99,3 +105,5 @@ bool dEvLib_callback_c::executeRun() {
         return eventEnd();
     }
 }
+
+#pragma pop_macro("_C")

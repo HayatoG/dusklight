@@ -757,6 +757,11 @@ void dScnLogo_c::nextSceneChange() {
     if (!mDoRst::isReset()) {
         if (!isOpeningCut())
         {
+            // 2026-05-28 (user request): try the full game flow including the
+            // OPENING_SCENE cutscene. Previously bypassed on Switch because of a
+            // JStudio::TParse aarch64 endianness bug that freezes the cutscene
+            // STB timeline. If it freezes again, revert to fopScnM_ChangeReq(
+            // this, fpcNm_NAME_SCENE_e, 0, 30) under #ifdef __SWITCH__.
             dComIfG_changeOpeningScene(this, fpcNm_OPENING_SCENE_e);
         } else {
             #if DEBUG

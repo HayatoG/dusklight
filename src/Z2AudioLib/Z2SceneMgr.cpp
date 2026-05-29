@@ -1945,6 +1945,15 @@ void Z2SceneMgr::sceneBgmStart() {
 
 void Z2SceneMgr::loadStaticWaves() {
     OS_REPORT("[Z2SceneMgr::loadStaticWaves] 常駐シーン波形を読み込みます\n");
+#if DUSK_AUDIO_DISABLED
+    // Audio subsystem is disabled on the Switch port; the JAUSectionHeap was
+    // never created so loadSeWave/loadBgmWave would null-deref on
+    // sectionHeap->getWaveBankTable(). Skip the entire static-wave load —
+    // dScnLogo_c::create can proceed without sound.
+    field_0x18 = 0x58;
+    field_0x19 = 0x58;
+    return;
+#else
     #if PLATFORM_SHIELD
     loadSceneWave(0, 2);
     #endif
@@ -1953,6 +1962,7 @@ void Z2SceneMgr::loadStaticWaves() {
     loadSeWave(0x58);
     field_0x18 = 0x58;
     field_0x19 = 0x58;
+#endif
 }
 
 BOOL Z2SceneMgr::checkFirstWaves() {
@@ -1961,7 +1971,11 @@ BOOL Z2SceneMgr::checkFirstWaves() {
 
 bool Z2SceneMgr::eraseSeWave(u32 wave) {
     JAUSectionHeap* sectionHeap = JASGlobalInstance<JAUSectionHeap>::getInstance();
+#if DUSK_AUDIO_DISABLED
+    if (sectionHeap == NULL) return false;
+#else
     JUT_ASSERT(2976, sectionHeap);
+#endif
 
     JASWaveBank* wave_bank = sectionHeap->getWaveBankTable().getWaveBank(0);
     if (wave_bank != NULL) {
@@ -1975,7 +1989,11 @@ bool Z2SceneMgr::eraseSeWave(u32 wave) {
 
 bool Z2SceneMgr::eraseBgmWave(u32 wave) {
     JAUSectionHeap* sectionHeap = JASGlobalInstance<JAUSectionHeap>::getInstance();
+#if DUSK_AUDIO_DISABLED
+    if (sectionHeap == NULL) return false;
+#else
     JUT_ASSERT(2988, sectionHeap);
+#endif
 
     JASWaveBank* wave_bank = sectionHeap->getWaveBankTable().getWaveBank(1);
     if (wave_bank != NULL) {
@@ -1989,7 +2007,11 @@ bool Z2SceneMgr::eraseBgmWave(u32 wave) {
 
 s32 Z2SceneMgr::getWaveLoadStatus(u32 wave, u32 bank) {
     JAUSectionHeap* sectionHeap = JASGlobalInstance<JAUSectionHeap>::getInstance();
+#if DUSK_AUDIO_DISABLED
+    if (sectionHeap == NULL) return 0;
+#else
     JUT_ASSERT(3001, sectionHeap);
+#endif
 
     JASWaveBank* wave_bank = sectionHeap->getWaveBankTable().getWaveBank(bank);
     if (wave_bank != NULL) {
@@ -2019,7 +2041,13 @@ bool Z2SceneMgr::loadSceneWave(u32 wave, u32 bank) {
 
 bool Z2SceneMgr::loadSeWave(u32 wave) {
     JAUSectionHeap* sectionHeap = JASGlobalInstance<JAUSectionHeap>::getInstance();
+#if DUSK_AUDIO_DISABLED
+    // Audio off on Switch: the JAUSectionHeap singleton was never instantiated.
+    // Z2SceneMgr::framework() per-frame load chain would crash dereffing it.
+    if (sectionHeap == NULL) return false;
+#else
     JUT_ASSERT(3030, sectionHeap);
+#endif
 
     JASWaveBank* wave_bank = sectionHeap->getWaveBankTable().getWaveBank(0);
     if (wave_bank != NULL) {
@@ -2035,7 +2063,11 @@ bool Z2SceneMgr::loadSeWave(u32 wave) {
 
 bool Z2SceneMgr::loadBgmWave(u32 wave) {
     JAUSectionHeap* sectionHeap = JASGlobalInstance<JAUSectionHeap>::getInstance();
+#if DUSK_AUDIO_DISABLED
+    if (sectionHeap == NULL) return false;
+#else
     JUT_ASSERT(3047, sectionHeap);
+#endif
 
     JASWaveBank* wave_bank = sectionHeap->getWaveBankTable().getWaveBank(1);
     if (wave_bank != NULL) {

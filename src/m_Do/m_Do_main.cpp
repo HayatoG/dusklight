@@ -7,6 +7,10 @@
 #include "m_Do/m_Do_main.h"
 #include <dolphin/vi.h>
 #include <cstring>
+#include <cstdio>
+#ifdef __SWITCH__
+extern "C" void dusk_switch_log(const char*);
+#endif
 #include "DynamicLink.h"
 #include "JSystem/JAudio2/JASAudioThread.h"
 #include "JSystem/JAudio2/JAUSectionHeap.h"
@@ -60,6 +64,7 @@
 #include "dusk/iso_validate.hpp"
 #include "dusk/logging.h"
 #include "dusk/main.h"
+#include "dusk/ui/graphics_tuner.hpp"
 #include "dusk/ui/menu_bar.hpp"
 #include "dusk/ui/overlay.hpp"
 #include "dusk/ui/prelaunch.hpp"
@@ -162,7 +167,19 @@ AuroraStats dusk::lastFrameAuroraStats;
 float dusk::frameUsagePct = 0.0f;
 
 bool launchUILoop() {
+#ifdef __SWITCH__
+    unsigned dusk_ui_frame_no = 0;
+#endif
     while (dusk::IsRunning && !dusk::IsGameLaunched) {
+#ifdef __SWITCH__
+        if (dusk_ui_frame_no < 8) {
+            char b[80];
+            snprintf(b, sizeof b, "[dusk] launchUILoop iter=%u IsRunning=%d IsGameLaunched=%d\n",
+                     dusk_ui_frame_no, (int)dusk::IsRunning, (int)dusk::IsGameLaunched);
+            ::dusk_switch_log(b);
+        }
+        ++dusk_ui_frame_no;
+#endif
         const AuroraEvent* event = aurora_update();
         while (event != nullptr && event->type != AURORA_NONE) {
             switch (event->type) {
@@ -174,6 +191,9 @@ bool launchUILoop() {
                 dusk::ImGuiEngine_Initialize(event->windowSize.scale);
                 break;
             case AURORA_EXIT:
+#ifdef __SWITCH__
+                ::dusk_switch_log("[dusk] launchUILoop AURORA_EXIT received -> returning false\n");
+#endif
                 return false;
             }
 
@@ -197,12 +217,24 @@ bool launchUILoop() {
 }
 
 void main01(void) {
+#ifdef __SWITCH__
+#  define DLOG(s) ::dusk_switch_log("[main01] " s "\n")
+#else
+#  define DLOG(s) ((void)0)
+#endif
+    DLOG("entry");
     OS_REPORT("\x1b[m");
 
     // 1. Setup
+    DLOG("mDoMch_Create ...");
     mDoMch_Create();
+    DLOG("mDoMch_Create done");
+    DLOG("mDoGph_Create ...");
     mDoGph_Create();
+    DLOG("mDoGph_Create done");
+    DLOG("mDoCPd_c::create ...");
     mDoCPd_c::create();
+    DLOG("mDoCPd_c::create done");
 
     // Console Setup
     JUTConsole* console = JFWSystem::getSystemConsole();
@@ -211,32 +243,55 @@ void main01(void) {
                                                       JUTConsole::OUTPUT_NONE);
         console->setPosition(32, 42);
     }
+    DLOG("console setup done");
 
     // Loader Init
     mDoDvdThd_callback_c::create((mDoDvdThd_callback_func)LOAD_COPYDATE, NULL);
+    DLOG("mDoDvdThd_callback_c::create LOAD_COPYDATE done");
 
+    DLOG("fapGm_Create ...");
     OSReport("Calling fapGm_Create()...\n");
     fapGm_Create();
+    DLOG("fapGm_Create done");
 
+    DLOG("fopAcM_initManager ...");
     OSReport("Calling fopAcM_initManager()...\n");
     fopAcM_initManager();
+    DLOG("fopAcM_initManager done");
 
+    DLOG("cDyl_InitAsync ...");
     OSReport("Calling cDyl_InitAsync()...\n");
     cDyl_InitAsync();
+    DLOG("cDyl_InitAsync done");
 
+    DLOG("audio heap create ...");
     g_mDoAud_audioHeap = JKRCreateSolidHeap(audioHeapSize, JKRGetCurrentHeap(), false);
     JKRHEAP_NAME(g_mDoAud_audioHeap, "g_mDoAud_audioHeap");
+    DLOG("audio heap done");
 
     if (DUSK_AUDIO_DISABLED) {
         // Pretend the audio engine initialized already. This is a lie, but needed to boot.
+        DLOG("DUSK_AUDIO_DISABLED -> onInitFlag");
         mDoAud_zelAudio_c::onInitFlag();
     }
 
     OSReport("Entering Main Loop (main01)...\n");
+    DLOG("entering main game-loop");
 
     dusk::game_clock::ensure_initialized();
 
+#ifdef __SWITCH__
+    unsigned main01_iter = 0;
+#endif
     do {
+#ifdef __SWITCH__
+        if (main01_iter < 10) {
+            char b[80];
+            snprintf(b, sizeof b, "[main01] iter=%u top\n", main01_iter);
+            ::dusk_switch_log(b);
+        }
+        ++main01_iter;
+#endif
         // 1. Update Window Events
         const AuroraEvent* event = aurora_update();
         while (true) {
@@ -335,7 +390,21 @@ void main01(void) {
             main_loop_limiter.Reset();
         }
 
+#ifdef __SWITCH__
+        if (main01_iter <= 10) {
+            char b[80];
+            snprintf(b, sizeof b, "[main01] iter=%u -> aurora_end_frame\n", main01_iter - 1);
+            ::dusk_switch_log(b);
+        }
+#endif
         aurora_end_frame();
+#ifdef __SWITCH__
+        if (main01_iter <= 10) {
+            char b[80];
+            snprintf(b, sizeof b, "[main01] iter=%u end_frame done\n", main01_iter - 1);
+            ::dusk_switch_log(b);
+        }
+#endif
 
 
         FrameMark;
@@ -347,7 +416,9 @@ void main01(void) {
     } while (dusk::IsRunning);
 
     exit:;
+    DLOG("game-loop exit (IsRunning=false or AURORA_EXIT)");
     dusk::ui::shutdown();
+#undef DLOG
 }
 
 static bool IsBackendAvailable(AuroraBackend backend) {
@@ -605,7 +676,16 @@ int game_main(int argc, char* argv[]) {
     } else {
         AuroraSetViewportPolicy(AURORA_VIEWPORT_STRETCH);
     }
-    VISetFrameBufferScale(dusk::getSettings().game.internalResolutionScale.getValue());
+#ifdef __SWITCH__
+    {
+        char b[160];
+        snprintf(b, sizeof b, "[dusk] VISetFrameBufferScale(%d) -- internalResolutionScale\n",
+                 dusk::getSettings().game.internalResolutionScale.getValue());
+        ::dusk_switch_log(b);
+    }
+#endif
+    VISetFrameBufferScale(dusk::ui::internal_resolution_scale(
+        dusk::getSettings().game.internalResolutionScale.getValue()));
     switch (dusk::getSettings().game.resampler.getValue()) {
     case dusk::Resampler::Area:
         aurora_set_resampler(SAMPLER_AREA);
@@ -700,7 +780,34 @@ int game_main(int argc, char* argv[]) {
             dusk::ui::push_document(std::make_unique<dusk::ui::Prelaunch>(), true);
 
             // pre game launch ui main loop
-            if (!launchUILoop()) {
+#ifdef __SWITCH__
+            ::dusk_switch_log("[dusk] main: entering launchUILoop\n");
+#endif
+            const bool launchUIResult = launchUILoop();
+#ifdef __SWITCH__
+            {
+                char b[160];
+                snprintf(b, sizeof b, "[dusk] main: launchUILoop returned %d (IsRunning=%d IsGameLaunched=%d)\n",
+                         (int)launchUIResult, (int)dusk::IsRunning, (int)dusk::IsGameLaunched);
+                ::dusk_switch_log(b);
+            }
+            // The Prelaunch document remains in dusk::ui::sDocumentStack even
+            // after it auto-flips IsGameLaunched. With any_document_visible()
+            // still returning true, dusk::ui::input::sync_input_block() calls
+            // PADBlockInput(true) on every frame, zeroing out PADRead() for
+            // the GameCube pad and freezing the in-game file-select menu
+            // (user reported: animation runs but no button works). Close any
+            // launcher documents now that the game is taking over input.
+            if (launchUIResult) {
+                ::dusk_switch_log("[dusk] main: closing launcher documents (PAD unblock)\n");
+                for (auto& doc : dusk::ui::get_document_stack()) {
+                    if (doc && !doc->closed()) {
+                        doc->hide(true);
+                    }
+                }
+            }
+#endif
+            if (!launchUIResult) {
                 dusk::crash_reporting::shutdown();
                 dusk::ShutdownFileLogging();
                 fflush(stdout);
@@ -739,11 +846,29 @@ int game_main(int argc, char* argv[]) {
 #endif
 
     if (!dusk::getSettings().backend.wasPresetChosen) {
+#ifdef __SWITCH__
+        // Switch: only the Dusklight preset is supported. Apply it silently
+        // and persist `wasPresetChosen=true` so the chooser never opens here.
+        dusk::ui::apply_preset_dusk_silently();
+        dusk::getSettings().backend.wasPresetChosen.setValue(true);
+        dusk::config::Save();
+        ::dusk_switch_log("[dusk] main: auto-applied Dusklight preset (Switch)\n");
+#else
         dusk::ui::push_document(std::make_unique<dusk::ui::PresetWindow>());
+#endif
     }
 
+#ifdef __SWITCH__
+    ::dusk_switch_log("[dusk] main: post-prelaunch -> version::init\n");
+#endif
     dusk::version::init();
+#ifdef __SWITCH__
+    ::dusk_switch_log("[dusk] main: LanguageInit\n");
+#endif
     LanguageInit();
+#ifdef __SWITCH__
+    ::dusk_switch_log("[dusk] main: OSInit\n");
+#endif
 
     OSInit();
 
@@ -755,17 +880,28 @@ int game_main(int argc, char* argv[]) {
     mDoRst::offReset();
     mDoRst::setLogoScnFlag(0);
 
+#ifdef __SWITCH__
+    ::dusk_switch_log("[dusk] main: dComIfG_ct\n");
+#endif
     // Global Context Init
     dComIfG_ct();
+#ifdef __SWITCH__
+    ::dusk_switch_log("[dusk] main: dComIfG_ct returned\n");
+#endif
 
     // Development Mode
     // mDoMain::developmentMode = 1;  // Force Dev Mode for Debugging
     mDoDvdThd::SyncWidthSound = false;
 
     OSReport("Starting main01 (Game Loop)...\n");
-
+#ifdef __SWITCH__
+    ::dusk_switch_log("[dusk] main: -> main01\n");
+#endif
 
     main01();
+#ifdef __SWITCH__
+    ::dusk_switch_log("[dusk] main: main01 returned\n");
+#endif
 
     dusk::MoviePlayerShutdown();
 
