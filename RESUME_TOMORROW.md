@@ -5,6 +5,15 @@
 
 ---
 
+## ⏰ PRÓXIMA SESSÃO — COMEÇAR POR AQUI (lembrar o Guilherme)
+
+**Combinado em 2026-06-02: a próxima sessão começa pelo BUG DE SAVE (hang no
+celeiro da Epona).** Análise estática já feita (ver "🐛 BUG ABERTO" abaixo) — o
+próximo passo é **instrumentar em runtime** (estática não fechou a causa exata).
+Lembrar o usuário disso ao iniciar. Depois disso, perf = A2 (cortar Dawn).
+
+---
+
 # 🟢 ESTADO ATUAL — 2026-06-02 (zero-copy WSI working)
 
 **🎉 A1 zero-copy WSI ENTREGUE e pushado.** O present (gargalo de 98%) caiu de
@@ -29,13 +38,47 @@ e pushado nos 3 repos privados HayatoG (zero-copy na **branch principal** de cad
 Durabilidade mesa: patch + `winsys/mesa-edits/` (overrides verbatim) restaurados por
 `apply-wsi-switch.sh`. Setup-do-zero documentado em `switch-nvk/BUILD_AND_RUN.md §2`.
 
-## 🐛 BUG ABERTO — save hang (celeiro da Epona)
-Ao salvar no ponto "animais no celeiro": **tela preta + diálogo de save**; "Sim"
-**trava** na tela preta, "Não" → "salva depois" → segue pra cutscene. **Provável
-parente do BrightCheck/save-path** que já consertamos (tela de save que não renderiza
-no Switch OU write do memcard `.gci` bloqueando). DIAGNÓSTICO: re-instrumentar
-`m_Do_MemCard.cpp`/`d_save.cpp`/a tela de save + reproduzir → ver onde bloqueia.
-É um carve-out cirúrgico `__SWITCH__` como os anteriores.
+## 🐛 BUG ABERTO — save hang (celeiro da Epona) — ANÁLISE 2026-06-02
+
+**Sintoma:** no save in-game (animais no celeiro) → tela preta + diálogo de save;
+**"Sim" trava** na tela preta (jogo segue PRESENTANDO ~12fps, não é freeze total —
+o `[wsi-prof]` continua), **"Não"** → "salva depois" → cutscene OK.
+
+**Call chain (mapeado):** `saveYesNoSelect` → `yesnoSelectStart` ("Salvando…") →
+`saveMoveDisp` → `dataWrite`→`dataSave` → `g_mDoMemCd_control.save()` (posta
+`COMM_STORE_e` + `OSSignalCond`) → worker `mDoMemCd_Ctrl_c::main()` →
+`store()` → seta `field_0x1fc8=1`. A tela de save fica em
+`PROC_MEMCARD_DATA_SAVE_WAIT` chamando `SaveSync()` todo frame; `SaveSync()`
+retorna 0 **enquanto `field_0x1fc8==0`**. **Hang = `field_0x1fc8` nunca vira 1.**
+
+**O que a análise ESTÁTICA descartou (importante, não repetir erro):**
+- ❌ NÃO é "COMM_STORE_e cai no no-op do SHIELD". **`VERSION=0` ⇒ `PLATFORM_GCN=TRUE`**
+  no Switch (`include/global.h`: VERSION_GCN_USA=0; VERSION 0..2 = GCN). Então a
+  branch `#if PLATFORM_GCN||PLATFORM_WII` compila e **`store()` É chamado** (linha
+  ~156). (O comentário no `m_Do_MemCard.cpp:86` sobre "falls through" foi escrito
+  com a premissa errada de GCN=false — ignorar.)
+- ❌ NÃO é CARDWrite async/callback: a Aurora `CARDWrite` (`extern/aurora/lib/dolphin/
+  card.cpp:735`) é **SÍNCRONA**; `store()` usa `CARDWrite`/`CARDRead` síncronos.
+- ❌ NÃO é erro de card: todo caminho de erro em `store()` ainda chega no
+  `field_0x1fc8=1` (linha 326). Erro ≠ hang.
+
+**⇒ Conclusão:** estaticamente `store()` DEVERIA completar. Como trava, a causa real
+exige **instrumentação em runtime**. Hipóteses a testar (em ordem):
+1. **Worker não processa `COMM_STORE_e`** — `OSSignalCond`/`OSWaitCond` (emulação
+   Aurora) não acordam o worker, OU o worker ficou preso num comando anterior
+   (ex: `COMM_ATTACH_e`/mount). ⇒ `store()` nunca roda.
+2. **`store()` roda mas BLOQUEIA** num `CARD_OPEN`/`CARDCreate`/`CARDWrite` da Aurora
+   (ex: card não montado e a emulação fica em estado ruim) antes da linha 326.
+3. **Hang DEPOIS do write** — `store()` completa, mas o estado seguinte
+   `PROC_MEMCARD_DATA_SAVE_WAIT2` (ou um fade/anim de "save completo") trava.
+
+**PLANO próxima sessão (1 ciclo de build):**
+1. Re-instrumentar com `dusk_switch_log`: entrada/saída de `store()`, transições de
+   `field_0x1fc8`, retorno de `SaveSync()`, e `mMenuProc` em `memCardDataSaveWait`
+   + estados seguintes. (Arquivos: `src/m_Do/m_Do_MemCard.cpp`, `src/d/d_menu_save.cpp`.)
+2. Build (relink rápido) → reproduzir o save do celeiro → puxar `sdmc:/dusklight.log`.
+3. O log aponta a hipótese certa (store não chamado / store bloqueia / pós-store).
+4. Carve-out `__SWITCH__` cirúrgico no ponto exato (como os fixes anteriores de save).
 
 ## 🎯 Próximas frentes de perf (ordem de impacto)
 1. **Cortar Dawn (A2)** — semanas, MAS é o único que sobe o baseline (o `submit`
