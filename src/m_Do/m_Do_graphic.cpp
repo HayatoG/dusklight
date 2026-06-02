@@ -355,8 +355,30 @@ void mDoGph_gInf_c::create() {
 
 static bool data_80450BE8;
 
+#ifdef __SWITCH__
+extern "C" void dusk_switch_log(const char*);
+#endif
+
 void mDoGph_gInf_c::beginRender() {
     ZoneScoped;
+
+#ifdef __SWITCH__
+    // B diag: track the JUTFader through the whole save->continue->resume path.
+    // None(0)=opaque black, Wait(1)=clear, FadeIn(2), FadeOut(3). on-change only.
+    // "[mwf]" prefix -> force-flushed by dusk_switch_log so a black hang leaves it
+    // on disk. Tells us if "continue" leaves the fader stuck at None (fade-in not
+    // driven) or it reaches Wait but the screen is still black (world not drawn).
+    {
+        static int s_lastFaderStatus = -99;
+        int fs = mFader ? (int)mFader->getStatus() : -2;
+        if (fs != s_lastFaderStatus) {
+            char _b[80];
+            snprintf(_b, sizeof(_b), "[mwf] JUTFader status %d -> %d\n", s_lastFaderStatus, fs);
+            dusk_switch_log(_b);
+            s_lastFaderStatus = fs;
+        }
+    }
+#endif
 
     #if PLATFORM_WII || PLATFORM_SHIELD
     VISetTrapFilter(fapGmHIO_getTrapFilter() ? 1 : 0);

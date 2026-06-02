@@ -20,6 +20,13 @@
 #include "d/d_msg_scrn_explain.h"
 #include "dusk/frame_interpolation.h"
 #include "dusk/settings.h"
+
+#ifdef __SWITCH__
+extern "C" void dusk_switch_log(const char*);
+#define MS_LOGF(...) do { char _msb[160]; snprintf(_msb, sizeof(_msb), __VA_ARGS__); dusk_switch_log(_msb); } while (0)
+#else
+#define MS_LOGF(...) ((void)0)
+#endif
 #include "JSystem/J2DGraph/J2DAnmLoader.h"
 #include "f_op/f_op_msg_mng.h"
 
@@ -715,6 +722,21 @@ void dMenu_save_c::_move() {
             }
         }
 
+#ifdef __SWITCH__
+        // B diag (post-save black on the FIELD/EVENT save). Trace every menu-proc
+        // transition + useType/saveStatus/endStatus so we can see EXACTLY which
+        // proc the event-save ends on (and where it stalls black). The earlier fix
+        // was on the collect-menu path (gameContinue/save_close) which this save
+        // never hits — this trace finds the real path.
+        {
+            static int s_lastProc = -1;
+            if ((int)mMenuProc != s_lastProc) {
+                MS_LOGF("[ms] proc %d -> %d useType=%d saveStatus=%d endStatus=%d\n",
+                        s_lastProc, (int)mMenuProc, (int)mUseType, (int)mSaveStatus, (int)mEndStatus);
+                s_lastProc = (int)mMenuProc;
+            }
+        }
+#endif
         (this->*MenuSaveProc[mMenuProc])();
 #if !TARGET_PC
         saveSelAnm();
@@ -1414,6 +1436,8 @@ void dMenu_save_c::gameContinueDisp() {
 
 void dMenu_save_c::gameContinue() {
     if (errYesNoSelect(0, 1)) {
+        MS_LOGF("[ms] gameContinue select=%s useType=%d\n",
+                mYesNoCursor == CURSOR_YES ? "YES(continue)" : "NO(quit)", mUseType);
         if (mYesNoCursor == CURSOR_YES) {
             mDoAud_seStart(Z2SE_SY_CONTINUE_OK, NULL, 0, 0);
 

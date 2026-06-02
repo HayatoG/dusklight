@@ -22,6 +22,17 @@
 
 #define SLOT_A 0
 
+// --- Switch-only save-hang instrumentation (Epona barn save) -----------------
+// Confirms at runtime which link of save()->worker->store()->SaveSync breaks.
+// Routed through dusk_switch_log (sdmc:/dusklight.log + live over `nxlink -s`).
+#ifdef __SWITCH__
+#include <cstdio>
+extern "C" void dusk_switch_log(const char*);
+#define MC_LOGF(...) do { char _mcb[160]; snprintf(_mcb, sizeof(_mcb), __VA_ARGS__); dusk_switch_log(_mcb); } while (0)
+#else
+#define MC_LOGF(...) ((void)0)
+#endif
+
 #define CHECKSPACE_RESULT_READY    0
 #define CHECKSPACE_RESULT_INSSPACE 1
 #define CHECKSPACE_RESULT_NOENT    2
@@ -140,6 +151,8 @@ void mDoMemCd_Ctrl_c::main() {
             OSWaitCond(&mCond, &mMutex);
         }
         OSUnlockMutex(&mMutex);
+
+        MC_LOGF("[mc] worker woke cmd=%d state=%d\n", mCardCommand, mCardState);
 
 #ifdef TARGET_PC
         if (dusk::IsShuttingDown) {
@@ -276,12 +289,15 @@ s32 mDoMemCd_Ctrl_c::LoadSync(void* i_buffer, u32 i_size, u32 i_position) {
 }
 
 void mDoMemCd_Ctrl_c::save(void* i_buffer, u32 i_size, u32 i_position) {
-    if (OSTryLockMutex(&mMutex)) {
+    BOOL locked = OSTryLockMutex(&mMutex);
+    MC_LOGF("[mc] save() tryLock=%d field=%d state=%d\n", locked, field_0x1fc8, mCardState);
+    if (locked) {
         memcpy(&mData[i_position], i_buffer, i_size);
         field_0x1fc8 = 0;
         mCardCommand = COMM_STORE_e;
         OSUnlockMutex(&mMutex);
         OSSignalCond(&mCond);
+        MC_LOGF("[mc] save() posted STORE + signalled\n");
     }
 }
 
@@ -289,6 +305,7 @@ void mDoMemCd_Ctrl_c::save(void* i_buffer, u32 i_size, u32 i_position) {
 void mDoMemCd_Ctrl_c::store() {
     CARDFileInfo file;
     s32 ret;
+    MC_LOGF("[mc] store() ENTER state=%d\n", mCardState);
     field_0x1fc8 = 0;
 
     if (mCardState == CARD_STATE_NO_FILE_e) {
@@ -324,6 +341,7 @@ void mDoMemCd_Ctrl_c::store() {
     }
 
     field_0x1fc8 = 1;
+    MC_LOGF("[mc] store() EXIT state=%d field=1\n", mCardState);
 }
 #endif
 

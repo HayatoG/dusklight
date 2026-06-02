@@ -24,6 +24,11 @@
 #include "dusk/settings.h"
 #endif
 
+#ifdef __SWITCH__
+#include <cstdio>
+extern "C" void dusk_switch_log(const char*);
+#endif
+
 dMsgScrnTalk_c::dMsgScrnTalk_c(u8 param_1, u8 param_2, JKRExpHeap* param_3) {
     if (param_3 != NULL) {
         field_0xe4 = param_3;
@@ -316,6 +321,20 @@ void dMsgScrnTalk_c::drawSelf() {
     grafContext[0] = dComIfGp_getCurrentGrafPort();
     grafContext[0]->setup2D();
     s16* pLen = (s16*)(mCharInfoPtr + 150);
+#ifdef __SWITCH__
+    // C diag: is the talk text laid out? *pLen == char count. len==0 -> the
+    // message parse/layout produced no glyphs (box draws but no text); len>0 ->
+    // glyphs exist but drawOutFont/draw isn't showing them. Throttled.
+    {
+        static unsigned _tk = 0;
+        if ((_tk++ & 0x1f) == 0) {
+            char _b[160];
+            snprintf(_b, sizeof(_b), "[talk] drawSelf len=%d charInfo=%p txScr=%p sel=%p\n",
+                     (int)*pLen, (void*)mCharInfoPtr, (void*)mpTxScreen, (void*)mpSelect_c);
+            dusk_switch_log(_b);
+        }
+    }
+#endif
     if (*pLen > 0) {
         f32 dVar10 = mpTm_c[0]->getAlphaRate();
         for (int i = 0; i < *pLen; i++) {
