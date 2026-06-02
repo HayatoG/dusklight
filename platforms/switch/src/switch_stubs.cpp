@@ -101,8 +101,15 @@ extern "C" {
             // tanking the framerate to <1fps. Crash reports still come from
             // Atmosphere (sdmc:/atmosphere/crash_reports/) so we don't need
             // per-line durability on dusklight.log.
+            // EXCEPTION: low-volume diagnostic lines ([mc]/[mw]/[ms]/[talk]/[cof]
+            // and [main01] boot breadcrumbs) force an immediate flush so a hang
+            // (e.g. the post-save black screen) leaves them on disk for FTP pull,
+            // instead of being stuck in the unflushed tail. These are rare, so the
+            // SD-write cost is negligible (not per-frame).
+            bool critical = (msg[0] == '[' &&
+                             (msg[1] == 'm' || msg[1] == 't' || msg[1] == 'c'));
             static unsigned log_lazy_ctr = 0;
-            if ((++log_lazy_ctr & 0x3f) == 0) {
+            if (critical || (++log_lazy_ctr & 0x3f) == 0) {
                 fflush(dusk_log_file);
             }
         }

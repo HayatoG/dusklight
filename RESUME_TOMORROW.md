@@ -7,10 +7,53 @@
 
 ## ⏰ PRÓXIMA SESSÃO — COMEÇAR POR AQUI (lembrar o Guilherme)
 
-**Combinado em 2026-06-02: a próxima sessão começa pelo BUG DE SAVE (hang no
-celeiro da Epona).** Análise estática já feita (ver "🐛 BUG ABERTO" abaixo) — o
-próximo passo é **instrumentar em runtime** (estática não fechou a causa exata).
-Lembrar o usuário disso ao iniciar. Depois disso, perf = A2 (cortar Dawn).
+> ⚠️ CORREÇÃO de um snapshot anterior de hoje que dizia "save RESOLVIDO": o save
+> **GRAVA** certo (isso está resolvido), mas o **pós-save trava** — e essa parte
+> NÃO estava resolvida. Estado real consolidado abaixo.
+
+**🎯 ALVO ÚNICO DA PRÓXIMA SESSÃO: o subsistema de TELA DE MENSAGEM (`d_msg_scrn_*`)
+no Switch.** A longa sessão de HW de 2026-06-02 (Switch=.10) provou que **dois bugs
+são o MESMO**:
+- **B — preto/cinza pós-save:** o save grava (`[mc] store() EXIT state=4` confirmado
+  4×), mas o menu trava num proc que **espera a tela de mensagem fechar** e ela nunca
+  fecha. Ex.: BLACK_EVENT auto-save (useType=4) → `PROC_SAVE_GUIDE`(5):
+  `if (mpScrnExplain->getStatus()==0) avança;` mas **`getStatus()` nunca dá 0**
+  (STATUS_WAIT). O `[mwf]` mostrou o **JUTFader CICLANDO** `None→FadeIn→Wait→FadeOut→None`
+  pra sempre = a `dMsgScrnExplain_c` **oscila abrir↔fechar, nunca assenta em WAIT** →
+  o mundo nunca aparece → preto/cinza. (JUTFader status 0=None=alpha 0xFF=preto opaco
+  por design.)
+- **C — sim/não sem texto:** `[talk] drawSelf len=21..66` prova que os glifos ESTÃO
+  montados (contagem certa) — o texto só **não é DESENHADO**. Texto principal =
+  `mpScreen->draw` (panes J2DTextBox, font=`mDoExt_getMesgFont` que ESTÁ carregado),
+  **não** o `COutFont` (`mpOutFont->draw(NULL)` = só glifos especiais → por isso meu
+  probe `[cof]`=0).
+
+⇒ **Consertar o `d_msg_scrn_*` (render do glifo J2DTextBox + state machine do explain)
+resolve B E C juntos.** Arquivos: `src/d/d_msg_scrn_explain.cpp` (state machine
+`move_process[mStatus]` — por que mStatus não assenta em STATUS_WAIT + o input/keyWait
+de dismiss), `src/d/d_msg_scrn_talk.cpp`/`d_msg_scrn_base.cpp` (o `mpScreen->draw`
+J2DTextBox — por que o texto setado+com-font não aparece), `src/d/d_msg_out_font.cpp`.
+Comparar com QUALQUER texto J2D que renderize no Switch (o launcher é RmlUi, não J2D!).
+
+**✅ JÁ FEITO E SÓLIDO (commitado nesta sessão):**
+- **Save WRITE corrigido** = lost-wakeup no `OSWaitCond` (`src/dusk/OSMutex.cpp`):
+  soltava o mutex 100% antes do `cv.wait()` → o `OSSignalCond(COMM_STORE_e)` se perdia.
+  Fix = manter 1 nível do lock recursivo até o `cv.wait()` (adopt_lock + `lock.release()`).
+  Confirmado 4× no HW. (Load respawnando na casa do Link sem Epona = vanilla TP, não bug.)
+- **switch_stubs `dusk_switch_log` força flush** em linhas `[m`/`[t`/`[c` → log FTP
+  confiável mesmo travado (antes o lazy-flush escondia o save). Lição: capturar via
+  `nxlink -s` ao vivo OU não relançar antes de puxar FTP (o log trunca a cada boot).
+- Instrumentação `dusk_switch_log` em árvore p/ a próxima sessão: `[mc]` (cadeia save),
+  `[mw]` (save-close), `[ms]` (proc-trace do `_move`), `[mwf]` (JUTFader on-change),
+  `[talk]` (len do texto), `[cof]` (camada errada, pode tirar). O `dMw_fade_in()` que
+  adicionei no collect_save_close DISPARA certo mas não é o fix (user cai em saves de
+  EVENTO, não no collect). Switch IP via DHCP muda (hoje .10; ping/arp p/ OUI Nintendo).
+
+**A — travadas de FPS (deferido, ordem após B/C):** present estável 136µs; gargalo CPU
+no frame. 1ª alavanca barata = cortar log DEBUG (`startupLogLevel`→INFO/WARN; `report()`
+filtra antes de formatar). Depois A3 (pipeline cache, spikes de compile) e A2 (cortar
+Dawn, sobe baseline ~13ms/frame do submit). Precisa run limpo de profiling (SD, sem
+nxlink, timers por fase) — os números medidos via nxlink-s estão inflados pelo fflush.
 
 ---
 

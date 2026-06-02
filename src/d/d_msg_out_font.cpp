@@ -8,6 +8,11 @@
 #include "dusk/frame_interpolation.h"
 #include "f_op/f_op_msg_mng.h"
 
+#ifdef __SWITCH__
+#include <cstdio>
+extern "C" void dusk_switch_log(const char*);
+#endif
+
 COutFontSet_c::COutFontSet_c() {
     initialize();
 }
@@ -317,6 +322,30 @@ void COutFont_c::draw(J2DTextBox* i_textbox, f32 param_1, f32 param_2, f32 param
     if (!uiTickPending) {
         for (int i = 0; i < 70; i++) {
             sp256[i] = -1;
+        }
+    }
+#endif
+
+#ifdef __SWITCH__
+    // C diag (yes/no dialog box renders without text). Pre-scan: how many glyphs
+    // belong to this textbox, and how many have a NULL glyph pane. Distinguishes
+    // empty-string (match=0) vs missing-font (nullPane>0) vs drawn-but-invisible
+    // (match>0, nullPane=0). Throttled; only logs textboxes that actually have glyphs.
+    {
+        static unsigned _cofc = 0;
+        int nMatch = 0, nNull = 0;
+        for (int j = 0; j < 35; j++) {
+            u8 t = mpOfs[j]->getType();
+            if (mpOfs[j]->getTextBoxPtr() == i_textbox && t != 0x47) {
+                nMatch++;
+                if (mpPane[t] == NULL) nNull++;
+            }
+        }
+        if (nMatch > 0 && (_cofc++ & 0x3f) == 0) {
+            char _b[128];
+            snprintf(_b, sizeof(_b), "[cof] draw tbox=%p match=%d nullPane=%d alphaRatio=%.2f\n",
+                     (void*)i_textbox, nMatch, nNull, (double)mAlphaRatio);
+            dusk_switch_log(_b);
         }
     }
 #endif

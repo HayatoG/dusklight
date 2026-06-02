@@ -1158,3 +1158,140 @@ parente do BrightCheck/save-path que já consertamos), e os stutters CPU-bound
 seguem. Mas o present, que era 98% do problema, virou 0.15ms. 🦊🔥
 
 *Entry escrita por Claude (Opus 4.8) sob direção de Guilherme Ryder, 2026-06-02.*
+
+---
+
+## Capítulo 6 — O sinal que se perdia (o bug de save, resolvido)
+
+*(mesmo dia, 2026-06-02 — depois do zero-copy)*
+
+Sobrou o bug de save: salvar no celeiro da Epona travava na tela preta. A
+sessão anterior já tinha feito a análise estática e batido numa parede —
+**concluiu que `store()` (a função que escreve no cartão) DEVERIA completar.**
+Todo caminho de erro chegava no flag de "terminei". Síncrono. Sem motivo pra
+travar. A conclusão honesta foi: "precisa instrumentar em runtime".
+
+Mas antes de instrumentar, reli o fluxo com outro olhar — e dessa vez **abri
+uma camada que a análise anterior nunca tinha aberto:** a emulação das
+primitivas de thread do GameCube. O save funciona assim: a thread principal
+posta um comando ("SALVA") pra uma thread-worker e a acorda com um sinal de
+condition-variable; o worker acorda, roda `store()`, e marca pronto.
+
+Em `OSWaitCond` — nossa reimplementação do `pthread_cond_wait` do GameCube —
+estava isto:
+
+```cpp
+for (...) mutex.unlock();        // solta o mutex 100%   ← BURACO
+{
+    unique_lock lock(mutex);     // re-adquire
+    cv.wait(lock);               // SÓ AGORA dorme
+}
+```
+
+Entre o `unlock` e o `cv.wait`, o mutex fica **totalmente livre por um
+instante, antes da thread realmente estar dormindo no sinal.** Se o `save()`
+da thread principal entrar exatamente nessa fresta — pega o mutex, posta
+"SALVA", solta, e dispara o sinal — o sinal **bate numa porta vazia**: ninguém
+está esperando ainda. O worker então entra no `cv.wait()`… e dorme pra sempre.
+`store()` nunca roda. O flag nunca vira "pronto". A tela de save fica
+perguntando "já terminou?" e ouvindo "não" eternamente. **Lost-wakeup
+clássico** — o bug de concorrência mais escorregadio que existe.
+
+Isso explicava TUDO, inclusive o que parecia contradição: por que o save do
+*menu inicial* (criar arquivo) funcionava mas o save *in-game* travava. É a
+mesma máquina — só muda o timing. No menu o worker já está parado e ocioso, o
+sinal chega limpo. No celeiro, sob carga de gameplay, o timing cai na fresta.
+
+O fix: manter **um** nível do lock segurado continuamente até o `cv.wait`
+liberar de forma atômica. Sem buraco. Correção válida pra qualquer
+condition-variable do engine, não só o cartão de memória.
+
+Instrumentei a cadeia inteira (`save()` → worker → `store()`) e mandei pro
+Switch. O Guilherme jogou até o celeiro e salvou. O log ao vivo:
+
+```
+[mc] save() posted STORE + signalled
+[mc] worker woke cmd=2 state=1      ← o sinal que ANTES se perdia
+[mc] store() ENTER state=1
+[mc] store() EXIT state=4 field=1   ← escreveu e terminou
+save cmdState 1                      ← save concluído
+```
+
+Salvou. Sem travar. A 30 fps o tempo todo.
+
+A lição vale o capítulo: a sessão anterior gastou um passe inteiro provando
+que `store()` "deveria funcionar" — e estava certa. O bug não estava em
+`store()`. Estava uma camada abaixo, na cola que segura as threads. **Quando
+uma operação de worker intermitentemente não roda apesar de ter sido postada
+corretamente, desconfie da atomicidade do mutex/condvar ANTES do código da
+operação.**
+
+Ficou um novo fio pra puxar: ao aceitar a missão do gado em Ordon, a caixa de
+sim/não aparece **sem texto**. O sim/não do menu de save mostra texto normal —
+então é a janela de mensagem do *diálogo in-field* que não desenha o texto.
+Outro subsistema, outra investigação. Mas o save, esse, fechou. 🦊🔥
+
+*Entry escrita por Claude (Opus 4.8) sob direção de Guilherme Ryder, 2026-06-02.*
+
+---
+
+## Capítulo 7 — O save grava, mas a história era outra (B e C viram um só)
+
+*(2026-06-02, continuação — várias horas no hardware real)*
+
+O Capítulo 6 terminou com "o save, esse, fechou". Eu estava metade certo. O save
+**grava** — disso não há mais dúvida, o log do Switch confirmou quatro vezes
+seguidas: `store() EXIT state=4`. O arquivo vai pro cartão, persiste, carrega. O
+lost-wakeup do `OSWaitCond` era real e está morto.
+
+Mas aí o Guilherme foi jogar de verdade. E salvou. E a tela ficou **preta**.
+
+"É pra funcionar", ele disse. E estava certo em cobrar.
+
+O que se seguiu foi uma maratona de instrumentação no hardware real — talvez umas
+oito rodadas de build → mandar pro Switch via Wi-Fi → ele reproduzir → eu ler o
+log ao vivo. Cada rodada descartou uma hipótese minha. E quase toda hipótese
+minha estava errada, o que é exatamente pra isso que serve medir em vez de chutar.
+
+Primeiro achei que era o fade da tela travado num gate. Instrumentei. O fader
+assentava e o menu fechava — **meu fix disparava certo**. Não era isso.
+
+Aí descobri que ele nem estava caindo no save que eu tinha consertado. Eu tinha
+mirado o save do menu-coletânea ("Continuar jogando?"). Ele caía no save de
+**evento** — pular a cerca dispara "deseja salvar?". Outro caminho de código
+inteiro. **Consertei o save errado.**
+
+Mais instrumentação. Um traço de TODA a máquina de estados do menu de save,
+proc por proc. E o log finalmente cantou: o save de evento (um auto-save de
+tutorial, dos que o jogo te ensina a salvar) gravava, e então travava num proc
+chamado `SAVE_GUIDE`, esperando uma coisa:
+
+```cpp
+if (mpScrnExplain->getStatus() == 0) { avança; }   // nunca dá 0
+```
+
+A **tela de mensagem** — aquela que mostra "aperte START pra salvar" — nunca
+fechava. O fader, num traço paralelo, mostrava por quê: ele **ciclava sem parar**,
+`preto → clareia → preto → clareia`, pra sempre. A tela de mensagem estava
+oscilando abrir-e-fechar eternamente, sem nunca assentar. Por isso o mundo nunca
+voltava. Por isso apertar A não fazia nada.
+
+E foi aí que as duas pontas se encontraram. Lembra do bug da caixa de "Sim/Não"
+sem texto? O log provou que o texto **estava lá** — 21, 44, 66 caracteres,
+montados certinho — só não era **desenhado**. E adivinha de qual subsistema é
+essa caixa? O mesmo `d_msg_scrn_*`. A mesma tela de mensagem.
+
+**B e C não eram dois bugs. Eram um só.** A tela de mensagem/escolha do jogo,
+quebrada no Switch em duas frentes: o texto não desenha, e a máquina de estados
+não assenta. Conserta ela, conserta os dois.
+
+Não é um fix de uma linha. É um subsistema. Então paramos aqui, com o alvo
+finalmente nítido, em vez de tatear cansado de madrugada. O save grava. Os dois
+bugs viraram um. E amanhã a gente ataca a coisa certa, com a mira limpa.
+
+A lição do dia não é técnica, é de método: eu marquei "resolvido" cedo demais no
+Capítulo 6, baseado em análise estática. O hardware real me corrigiu — várias
+vezes. Medir no aparelho, ler o log inteiro, e deixar o Guilherme jogar de
+verdade valeu mais que qualquer teoria minha. 🦊🔥
+
+*Entry escrita por Claude (Opus 4.8) sob direção de Guilherme Ryder, 2026-06-02.*
