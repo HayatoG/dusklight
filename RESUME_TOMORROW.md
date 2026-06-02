@@ -5,7 +5,48 @@
 
 ---
 
-# 🟢 ESTADO ATUAL — 2026-05-29 (fim do dia)
+# 🟢 ESTADO ATUAL — 2026-06-02 (zero-copy WSI working)
+
+**🎉 A1 zero-copy WSI ENTREGUE e pushado.** O present (gargalo de 98%) caiu de
+**9.6ms → ~150µs (64×)**; gameplay **~21 → 28-30 fps** (picos 60). Tudo commitado
+e pushado nos 3 repos privados HayatoG (zero-copy na **branch principal** de cada).
+
+## O que foi feito hoje
+1. **Profiling do present** → achou que 98% era memcpy de CPU (GPU = 20µs).
+2. **Logs verbosos off** (`NVK_TRACE` gate) → gameplay 17→21, home 12→24, de graça.
+3. **Zero-copy WSI** (block-linear `kind=0xfe`, render direto no buffer do nwindow,
+   `present=nwindowQueueBuffer`, sem memcpy/swizzle). Provado no smoke + Dusklight.
+   - Bug-chave: `NvGraphicBuffer.header.num_ints` tem que ser setado ou o
+     `nwindowDequeueBuffer` trava (tela preta). + `nvFenceInit()` antes do dequeue.
+
+## Commits/branches (todos pushados, privado HayatoG)
+| Repo | Branch | Commit |
+|---|---|---|
+| `switch-nvk` | `master` (FF) + `switch-port/wsi-zero-copy` | `81bfc43` |
+| `aurora-switch` | `dusklight-switch-port` | `bbdc576` |
+| `dusklight` | `main` | (este commit) |
+
+Durabilidade mesa: patch + `winsys/mesa-edits/` (overrides verbatim) restaurados por
+`apply-wsi-switch.sh`. Setup-do-zero documentado em `switch-nvk/BUILD_AND_RUN.md §2`.
+
+## 🐛 BUG ABERTO — save hang (celeiro da Epona)
+Ao salvar no ponto "animais no celeiro": **tela preta + diálogo de save**; "Sim"
+**trava** na tela preta, "Não" → "salva depois" → segue pra cutscene. **Provável
+parente do BrightCheck/save-path** que já consertamos (tela de save que não renderiza
+no Switch OU write do memcard `.gci` bloqueando). DIAGNÓSTICO: re-instrumentar
+`m_Do_MemCard.cpp`/`d_save.cpp`/a tela de save + reproduzir → ver onde bloqueia.
+É um carve-out cirúrgico `__SWITCH__` como os anteriores.
+
+## 🎯 Próximas frentes de perf (ordem de impacto)
+1. **Cortar Dawn (A2)** — semanas, MAS é o único que sobe o baseline (o `submit`
+   do Dawn ~13ms/frame segura o gameplay em 20-30). Sem receita decompilada.
+2. **Pipeline cache (A3)** — horas, ganho pequeno (só os spikes raros de compile).
+3. Asset streaming — descartado (log de gameplay estável tem 0 loads).
+TARGET_PC carve-out (B1): deixar reativo/crash-driven, NÃO proativo.
+
+---
+
+# 🟢 ESTADO — 2026-05-29 (fim do dia)
 
 **Tudo funcionando, tudo commitado e pushado em HayatoG private.**
 

@@ -1067,3 +1067,94 @@ gameplay rodando em 29 de maio.*
 *Material-fonte: 35 memórias em `~/.claude/projects/D--Projects-dusklight/memory/`,
 docs em `D:\Projects\dusklight\platforms\switch\` e `D:\switch-nvk\`, git
 history dos 6 repos, e logs/crash reports diretos do hardware.*
+
+---
+
+# 📅 2026-06-02 — O dia do zero-copy (17 → 30 fps)
+
+> Os dias 30/05, 31/05 e 01/06 foram de pausa (sem commits em nenhum repo).
+> Hoje retomou — e foi um dos dias mais produtivos do projeto.
+
+## Capítulo 1 — Medir antes de mexer
+
+O gameplay rodava a ~17 fps. A tentação era sair otimizando no chute. Em vez
+disso: **instrumentei o present** (o passo final que joga a imagem na TV) com
+timers por fase e rodei no hardware. O resultado foi cirúrgico:
+
+```
+fence/GPU    = 20µs    (a GPU termina quase de graça)
+dcacheflush  = 176µs
+memcpy+queue = 9.400µs  ← 98% do tempo!
+```
+
+**98% do present era um memcpy de CPU.** A GPU (o famoso "Tegra fraco") não era
+o gargalo — era a CPU copiando 3.7MB por frame pra um buffer não-cacheado. Cinco
+meses de "será que é a GPU?" respondidos por um log: não, era a cópia.
+
+## Capítulo 2 — O ganho de graça
+
+Antes do trabalho grande, um achado: o driver cuspia ~15-20 linhas de log POR
+FRAME (cada uma escrevendo no SD + rede). Gateei tudo atrás de um `NVK_TRACE`
+(default off). Gameplay **17 → 21 fps**. Home do Dusk **12 → 24 fps**. De graça,
+só desligando log de debug.
+
+## Capítulo 3 — Zero-copy, e a análise que evitou um beco
+
+O memcpy existia porque a imagem que a GPU renderiza e o buffer que o compositor
+da TV lê eram **dois lugares diferentes**. Zero-copy = renderizar DIRETO no buffer
+do compositor. Sem cópia.
+
+A receita estava decompilada do driver do Dan (`kind=0xfe`, block-linear). Mas
+antes de escrever, **analisei o fluxo inteiro** — e foi isso que salvou o dia.
+Descobri que o `framebufferMakeLinear` do libnx é uma *ilusão*: ele finge ser
+linear mas swizzla escondido. Ou seja, o compositor SÓ aceita block-linear. Se
+eu tivesse ido pela abordagem "linear" que parecia mais fácil, teria batido num
+beco sem saída. **A análise cuidadosa antes de codar valeu cada minuto.**
+
+## Capítulo 4 — Tela preta, e o bug de um campo
+
+Implementei tudo, buildei no smoke standalone (loop de 2min em vez de 12). Rodou.
+**Tela preta.** Não crashou — só preto.
+
+O log (printf, porque no smoke o sink normal é no-op) mostrou: os buffers
+configuravam OK, mas o `nwindowDequeueBuffer` **travava no primeiro frame**.
+Comparei campo-a-campo com o source do `framebufferCreate` do libnx e achei:
+
+```c
+gb->header.num_ints = (sizeof(NvGraphicBuffer) - sizeof(NativeHandle)) / 4;
+```
+
+Eu tinha deixado esse campo **zerado**. Com ele em 0, o sistema aceita o buffer
+(rc=0) mas marshalla um GraphicBuffer **vazio** → o dequeue espera pra sempre por
+um buffer que nunca fica pronto → preto. Um campo. `num_ints`.
+
+Setei o campo. Rebuildei. Mandei pro Switch.
+
+> **"TELA COLORIDAAAAAAAA"** — Guilherme, 2026-06-02
+
+## Capítulo 5 — O número
+
+Propaguei pro Dusklight (mesmo arquivo, é só relinkar). No gameplay, o log:
+
+```
+present_total = 153µs   ← era 9.600µs. 64× mais rápido.
+dcacheflush   = 0       ← block-linear não precisa flush
+memcpy        = ZERO
+```
+
+Gameplay **~21 → 28-30 fps** (picos de 60). O gargalo que segurou o projeto por
+meses morreu numa tarde.
+
+## O que ficou claro
+
+O "1 a 2 semanas" que eu estimava pro WSI virou ~1 hora de implementação. Não por
+mágica — por **condições favoráveis** (receita decompilada + loop de teste rápido
++ bug achável no source do libnx) e por **medir/analisar antes de codar**. Os
+próximos passos (cortar Dawn, áudio) não têm essas vantagens, então não vão ser
+tão rápidos. Mas hoje, o Twilight Princess rodou a **30 fps** na TV do Switch.
+
+Ainda há um bug de save (tela preta ao salvar no celeiro da Epona — provável
+parente do BrightCheck/save-path que já consertamos), e os stutters CPU-bound
+seguem. Mas o present, que era 98% do problema, virou 0.15ms. 🦊🔥
+
+*Entry escrita por Claude (Opus 4.8) sob direção de Guilherme Ryder, 2026-06-02.*
