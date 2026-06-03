@@ -912,6 +912,23 @@ void dMenu_save_c::saveQuestion4() {
 }
 
 void dMenu_save_c::saveGuide() {
+#ifdef __SWITCH__
+    // B FIX (post-save gray-screen hang on the gameover/BLACK_EVENT event-save):
+    // the guide message (msg 0x4E4, opened via openExplain(...,/*field_0x58=*/true))
+    // sits at STATUS_MOVE(3) waiting for a pad trigger to dismiss, but in the
+    // gameover/pause context the input never reaches the explain's move_proc
+    // (getTrigA(PAD_1) stays 0) -> it would wait forever -> infinite gray screen.
+    // Force the dismiss (field_0x58==true, so onForceSelect satisfies move_proc's
+    // close condition) -> explain closes -> the save flow completes and the gameover
+    // resumes. Mirrors the existing onForceSelect pattern at lines ~833/~1632. The
+    // save itself already succeeded (store() EXIT state=4) at this point.
+    if (mpScrnExplain != NULL) {
+        u8 st = mpScrnExplain->getStatus();
+        if (st == 3 || st == 4) {
+            mpScrnExplain->onForceSelect();
+        }
+    }
+#endif
     if (mpScrnExplain->getStatus() == 0) {
         mEndStatus = 1;
         mSaveStatus = 3;

@@ -17,8 +17,13 @@ struct dMsgScrnTalk_c : public dMsgScrnBase_c {
     void arwAnimeMove();
     void dotAnimeInit();
     void dotAnimeMove();
-    void setSelectString(char*, char*, char*);
-    void setSelectRubyString(char*, char*, char*);
+    // FIX (Switch yes/no had no text): params MUST be `char DUSK_CONST*` to MATCH the
+    // dMsgScrnBase_c virtual. On Dusk (DUSK_CONST=const) a `char*` signature is a
+    // DIFFERENT method that does NOT override the base no-op, so d_msg_object's
+    // `mpScrnDraw->setSelectString(...)` (base ptr) ran the EMPTY base virtual and the
+    // option text never reached the panes. On GC DUSK_CONST is empty so it matched.
+    void setSelectString(char DUSK_CONST*, char DUSK_CONST*, char DUSK_CONST*);
+    void setSelectRubyString(char DUSK_CONST*, char DUSK_CONST*, char DUSK_CONST*);
     bool isSelect();
     void selectAnimeInit(u8, u8, f32, u8);
     bool selectAnimeMove(u8, u8, bool);
