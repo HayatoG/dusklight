@@ -650,7 +650,20 @@ int game_main(int argc, char* argv[]) {
         config.windowHeight = defaultWindowHeight * 2;
         config.desiredBackend = ResolveDesiredBackend(parsed_arg_options);
         config.logCallback = &aurora_log_callback;
+#ifdef __SWITCH__
+        // PERF: on Switch there are no CLI args, so startupLogLevel stays at its
+        // default LOG_DEBUG(0) -> NOTHING is filtered and the engine's per-frame
+        // [DEBUG|dusk] spam (fapGm_Execute, fpc*, Loading Resource...) each does a
+        // double fflush (stdout + SD file) in aurora_log_callback -> stutters/spikes.
+        // The upstream filter at aurora/lib/logging.hpp:22 (g_config.logLevel > level
+        // -> return) drops them for free when the level is raised. LOG_INFO drops the
+        // per-frame DEBUG spam (the stutter source, HW-confirmed) while keeping the
+        // sparse INFO lines (incl. [SwitchProfile] frame-time, useful for FPS tuning).
+        // Use LOG_WARNING for a final clean release.
+        config.logLevel = LOG_INFO;
+#else
         config.logLevel = startupLogLevel;
+#endif
         config.mem1Size = 256 * 1024 * 1024;
         config.mem2Size = 24 * 1024 * 1024;
         config.allowJoystickBackgroundEvents = dusk::getSettings().game.allowBackgroundInput;
