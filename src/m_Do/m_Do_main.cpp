@@ -656,11 +656,11 @@ int game_main(int argc, char* argv[]) {
         // [DEBUG|dusk] spam (fapGm_Execute, fpc*, Loading Resource...) each does a
         // double fflush (stdout + SD file) in aurora_log_callback -> stutters/spikes.
         // The upstream filter at aurora/lib/logging.hpp:22 (g_config.logLevel > level
-        // -> return) drops them for free when the level is raised. LOG_INFO drops the
-        // per-frame DEBUG spam (the stutter source, HW-confirmed) while keeping the
-        // sparse INFO lines (incl. [SwitchProfile] frame-time, useful for FPS tuning).
-        // Use LOG_WARNING for a final clean release.
-        config.logLevel = LOG_INFO;
+        // -> return) drops them for free when the level is raised. The per-frame DEBUG
+        // spam is the ONLY heavy log volume (the stutter source, HW-confirmed); every
+        // level above DEBUG drops it, so LOG_WARNING costs the same as FATAL but keeps
+        // the genuinely-useful WARNING/ERROR/FATAL lines (no spam, not blind).
+        config.logLevel = LOG_WARNING;
 #else
         config.logLevel = startupLogLevel;
 #endif
