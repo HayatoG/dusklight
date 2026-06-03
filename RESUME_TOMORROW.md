@@ -5,6 +5,53 @@
 
 ---
 
+## ✅ 2026-06-02 (noite) — BUGS C e B-HANG RESOLVIDOS na TV (commit `f451660e79`)
+
+> ⚠️ CORREÇÃO da seção abaixo (que dizia "B e C são o MESMO bug"): **estava ERRADA.**
+> Os heartbeats por-frame no HW provaram que são DOIS bugs independentes, com causas
+> totalmente diferentes. Ambos consertados e confirmados na TV/HW hoje.
+
+**Bug C — sim/não do gameplay sem texto: RESOLVIDO ✅ (confirmado TV+log).**
+Não era parse nem fonte — a extração da mensagem enchia `mSelText` com "Sim"/"Não"
+certinho. Era um **override quebrado**: `dMsgScrnTalk_c`/`dMsgScrnItem_c::setSelectString`
+declaravam `char*`, mas no Dusk `DUSK_CONST=const` torna a virtual da base
+`setSelectString(char DUSK_CONST*, ...)` — assinatura DIFERENTE → não sobrescrevia →
+`mpScrnDraw->setSelectString` (ponteiro base) rodava a virtual VAZIA da base → o texto
+nunca chegava aos painéis. No GC `DUSK_CONST` é vazio, casava, funcionava. Fix: usar
+`char DUSK_CONST*` nas 4 assinaturas (talk + item, .h + .cpp).
+
+**Bug B — trava preta/cinza pós-save: RESOLVIDO ✅ (HW, continua pra cutscene).**
+O save de evento (celeiro) é `gameOverType==2` → `dGameover_c` (a TELA DE GAME-OVER é o
+veículo do save de evento; NÃO é o menu collect — por isso `[mw]` nunca disparou e o
+"B-FIX" antigo do collect era irrelevante). O save GRAVA certo. A trava: a mensagem-guia
+pós-save (msg 0x4E4) fica em `STATUS_MOVE` esperando um trigger de pad pra fechar, mas no
+contexto game-over/pause o input **não chega** ao `move_proc` (`getTrigA(PAD_1)`=0 sempre,
+mesmo apertando A) → espera pra sempre. Fix: `saveGuide()` força o dismiss no Switch
+(`onForceSelect`, já que `field_0x58==true` pra essa msg) → o fluxo completa e o jogo resume.
+
+### 🔴 ISSUES QUE FALTAM (próxima sessão)
+1. **B-visibilidade** (a "tela preta/cinza" que sobra): os diálogos do save de evento
+   (caixa SIM/NÃO + mensagem-guia) estão **invisíveis** durante o game-over — os dados
+   estão certos, mas o draw fica ATRÁS do backdrop preto opaco do game-over
+   (`dgo_screen_c`, `setBackAlpha(1.0)`) e/ou do JUTFader (None=alpha 0xFF=preto). É um
+   bug de **ordem/camada/alpha de draw 2D**, não de dados. O usuário passa, mas às cegas.
+2. **Input morto no pause/game-over:** `getTrigA(PAD_1)`=0 no `move_proc` do explain
+   durante o game-over (contornado no B via `onForceSelect`, mas a raiz — pad não
+   entregando trigger no contexto pause/game-over — segue latente; pode afetar outros
+   diálogos de pause). `read()` roda (sim ativo), então a causa é mais sutil (trigger
+   consumido/limpo antes do explain ler? input routing no pause?). Investigar
+   `mDoCPd_c`/JUTGamePad no contexto pause.
+3. **Purgar probes obsoletos** do commit `b08b5fa` (diagnóstico do save-hang, já resolvido):
+   `[ms]`/`[talk]`/`[mwf]`/`[mc]`/`[mw]`/`[cof]` em m_Do_graphic, m_Do_MemCard,
+   d_menu_window, d_msg_out_font, d_msg_scrn_talk, m_Do_main. Contribuem p/ a queda de FPS
+   na tela de mensagem.
+4. **Bug latente** (fiel ao GC, inativo): `d_gameover.cpp:322` `getGameOverType()==1 && ==2`
+   é sempre-falso (deveria ser `||`). Não é a trava atual (vem DEPOIS do save fechar).
+5. **Auditar DUSK_CONST/override:** o mesmo padrão `char*` vs `char DUSK_CONST*` pode
+   quebrar OUTROS overrides de virtuals de `dMsgScrnBase_c` (e similares). Vale uma varredura.
+
+---
+
 ## ⏰ PRÓXIMA SESSÃO — COMEÇAR POR AQUI (lembrar o Guilherme)
 
 > ⚠️ CORREÇÃO de um snapshot anterior de hoje que dizia "save RESOLVIDO": o save
