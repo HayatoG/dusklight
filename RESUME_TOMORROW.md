@@ -5,6 +5,45 @@
 
 ---
 
+## ✅ 2026-06-02 (madrugada) — STUTTER DE LOG resolvido + análise de FPS + Release do NRO
+
+**Stutter/spikes do gameplay = LOG.** No Switch não há args de CLI, então `startupLogLevel`
+ficava no default `LOG_DEBUG(0)` → o filtro a montante (`aurora/lib/logging.hpp:22`,
+`g_config.logLevel > level → return`) **não dropava nada**, e cada linha `[DEBUG|dusk]`
+per-frame (`fapGm_Execute`, `fpc*`, `Loading Resource`…) batia em `aurora_log_callback`, que
+faz **DUPLO `fflush`** (stdout + arquivo SD) por linha → stutter constante + spikes nos loads.
+**Fix:** `m_Do_main.cpp` força `config.logLevel = LOG_WARNING` no Switch → o filtro dropa o
+DEBUG antes de formatar/flushar. **Confirmado na TV: spikes sumiram.** (DEBUG é o único volume
+pesado; INFO/WARNING/FATAL têm a MESMA perf — WARNING mantém avisos/erros úteis.)
+
+**NRO publicado** (Release prerelease, privado HayatoG):
+`github.com/HayatoG/dusklight/releases/tag/switch-2026-06-02-msgfix` — esse build tem C + B-hang
++ anti-stutter.
+
+### 🎯 FPS — análise do breakdown (`[SwitchProfile][aurora_end]`, steady ~30fps)
+| fase | ms | nota |
+|---|---|---|
+| **submit** | **5–12** | ⬅️ DOMINA (50-70%). Submissão de cmds do Dawn. |
+| render | 1–2 | escala com resolução (por isso 360p >> 720p) |
+| present | ~2 | já otimizado (zero-copy) |
+| rml | ~1 | RmlUi desenhado todo frame, mesmo in-game |
+
+TP é 30fps nativo; cenas leves batem 30, pesadas caem qdo `submit+render+sim > 33ms`.
+**Levers (ordem de impacto):** (1) **resolução interna** (`internalResolutionScale` — ganho
+fácil/grande, user já comprovou 360p; achar sweet-spot ~480p + tornar setting); (2) **cortar
+Dawn** (submit, Aurora→NVK direto — semanas, é o teto do baseline); (3) **reduzir draw calls**
+(submit escala c/ draws); (4) **RmlUi in-game** (~1ms, desligar se não precisa).
+
+### Frentes abertas (escolha do user)
+1. **FPS** — começar pela resolução (sweet-spot + setting), ou profiling limpo, ou cortar Dawn.
+2. **Merge do upstream** `TwilitRealm/dusklight` (remote `upstream` já configurado) — traz
+   features novas; merge cuidadoso pra não perder os carve-outs `#ifdef __SWITCH__`.
+3. **Overlay ImGui in-game** (settings/debug): suíte em `src/dusk/imgui/` (excluída no Switch via
+   `CMakeLists.txt:498`, `imgui.h` stubado). A Aurora JÁ tem hook ImGui (`imGuiInitCallback`,
+   render pelo backend) → fundação existe; falta re-incluir + ImGui real + input Joy-Con.
+
+---
+
 ## ✅ 2026-06-02 (noite) — BUGS C e B-HANG RESOLVIDOS na TV (commit `f451660e79`)
 
 > ⚠️ CORREÇÃO da seção abaixo (que dizia "B e C são o MESMO bug"): **estava ERRADA.**
