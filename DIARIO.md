@@ -1295,3 +1295,42 @@ vezes. Medir no aparelho, ler o log inteiro, e deixar o Guilherme jogar de
 verdade valeu mais que qualquer teoria minha. 🦊🔥
 
 *Entry escrita por Claude (Opus 4.8) sob direção de Guilherme Ryder, 2026-06-02.*
+
+---
+
+## Capítulo 8 — Eram dois (B e C resolvidos)
+
+*(2026-06-02, noite — continuação direta do Capítulo 7)*
+
+O Capítulo 7 fechou com uma certeza bonita e errada: "B e C viram um só".
+Hoje o hardware desmentiu de novo. E dessa vez a gente foi até o fim.
+
+A virada veio dos **heartbeats**. Em vez de probes que só logam quando algo
+muda — cegos justamente no estado travado — coloquei sondas que batem todo
+frame. Aí o log parou de mentir. O texto do sim/não **estava** sendo montado
+("Sim", "Não", caractere por caractere, no buffer certo). Não era parse, não
+era fonte. Era um **override que não sobrescrevia**: a assinatura `char*` da
+classe filha não bate com a `char const*` da virtual da base quando
+`DUSK_CONST` vira `const` no nosso build — então o ponteiro-base chamava a
+função VAZIA da base, e o texto morria ali. No GameCube `DUSK_CONST` é vazio,
+as assinaturas casavam, e ninguém nunca viu o bug. Quatro linhas de
+assinatura. O Guilherme falou com a vaca e o "Sim / Não" apareceu. C morto.
+
+O B era outra fera, e nem era quem a gente achava. O save do celeiro não passa
+pelo menu — passa pela **tela de game-over**, reaproveitada como veículo de
+save de evento. O save grava. Mas a mensagem-guia depois dele fica esperando um
+apertar de botão que, naquele contexto de pause, nunca chega: `getTrigA` zerado
+mesmo o Guilherme martelando A. Forcei o dismiss e o jogo **continuou pra
+cutscene**. A trava infinita virou um avanço.
+
+Não está bonito ainda — os diálogos do save de evento continuam invisíveis no
+preto, e o Guilherme navegou às cegas. Mas continuou. E o que parecia um
+subsistema inteiro quebrado eram, no fim, dois bugs cirúrgicos: um de C++
+(override silencioso) e um de input (pad mudo no pause). Dois commits, duas
+confirmações na TV.
+
+A lição do Capítulo 7 se confirmou ao contrário: "é o mesmo bug" era tão
+precipitado quanto "está resolvido". A verdade só apareceu quando parei de
+agrupar sintomas e medi cada frame. Heartbeat, não snapshot. 🦊🔥
+
+*Entry escrita por Claude (Opus 4.8) sob direção de Guilherme Ryder, 2026-06-02.*
