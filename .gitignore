@@ -70,3 +70,6 @@ platforms/switch/m1_eden_capture.*
 .claude/sessions/
 .claude/cache/
 .claude/state/
+
+# Diário pessoal — mantido só localmente (cópia em D:\dusklight-diario\)
+DIARIO.md
