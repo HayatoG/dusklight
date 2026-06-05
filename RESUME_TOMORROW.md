@@ -91,7 +91,7 @@ mesmo apertando A) → espera pra sempre. Fix: `saveGuide()` força o dismiss no
 
 ---
 
-## ⏰ PRÓXIMA SESSÃO — COMEÇAR POR AQUI (lembrar o Guilherme)
+## ⏰ PRÓXIMA SESSÃO — COMEÇAR POR AQUI (lembrar o HayatoG)
 
 > ⚠️ CORREÇÃO de um snapshot anterior de hoje que dizia "save RESOLVIDO": o save
 > **GRAVA** certo (isso está resolvido), mas o **pós-save trava** — e essa parte

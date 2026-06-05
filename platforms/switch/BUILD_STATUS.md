@@ -274,6 +274,6 @@ If the next session opens cold:
 1. Read this file end-to-end first.
 2. The build cmd is still `bash platforms/switch/build-docker.sh build`.
 3. ELF is at `build-switch/dusklight.elf`; NRO produced via `aarch64-none-elf-strip` + `elf2nro` inside docker (see history of `build-docker.sh` invocations).
-4. Eden log location: `C:\Users\Guilherme\AppData\Roaming\Eden\log\eden_log.txt`.
-5. Filter trace lines: `grep -aE "DUSKLIGHT-TRACE|AURORA-TRACE|GPU-TRACE" /c/Users/Guilherme/AppData/Roaming/Eden/log/eden_log.txt`.
+4. Eden log location: `C:\Users\HayatoG\AppData\Roaming\Eden\log\eden_log.txt`.
+5. Filter trace lines: `grep -aE "DUSKLIGHT-TRACE|AURORA-TRACE|GPU-TRACE" /c/Users/HayatoG/AppData/Roaming/Eden/log/eden_log.txt`.
 6. Next step is either: instrument Dawn's BackendGL/DisplayEGL to find where GLES fails, OR pivot to `switch-port/opengl-desktop` branch.

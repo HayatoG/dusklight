@@ -84,7 +84,7 @@ kill %1
 
 # Inspect traces
 grep -aE "DUSKLIGHT-TRACE|AURORA-TRACE|GPU-TRACE|trying backend" \
-  /c/Users/Guilherme/AppData/Roaming/Eden/log/eden_log.txt | tail -50
+  /c/Users/HayatoG/AppData/Roaming/Eden/log/eden_log.txt | tail -50
 ```
 
 ### 4. Interpret results
