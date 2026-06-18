@@ -12,6 +12,14 @@ Boot was un-stuck by FTP-resetting `video.lockAspectRatio: false` in
 `sdmc:/TwilitRealm/Dusklight/config.json`. Works in the launcher (aspect changed before the
 zero-copy swapchain is active), crashes in-game.
 
+## CONFIRMED (2026-06-18, HW capture nxlink_rescrash.log): RESOLUTION change hits the same bug
+Changing `game.internalResolutionScale` in the LAUNCHER menu crashes too (graphics_tuner.cpp:96-97
+applies `VISetFrameBufferScale` LIVE on every selector step → swapchain recreate). Log proves it:
+boot configures OK (`nwindowConfigureBuffer -> 0x0`, zero-copy ENABLED), then on the resolution
+change `nwindowConfigureBuffer -> 0xf59` → zero-copy FAILED → exiting. So this bug is NOT just the
+in-game 4:3 edge case — it breaks any extent change (resolution + aspect), launcher or in-game.
+Option A (WSI recreate handling) fixes all of them at once.
+
 ## Root cause
 `wsi_switch_surface_create_swapchain` (in **switch-nvk**:
 `mesa-25/src/vulkan/wsi/wsi_common_switch.c`, ~L469-568, compiled into `libvulkan.a` linked by
