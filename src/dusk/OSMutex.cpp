@@ -181,34 +181,21 @@ void OSWaitCond(OSCond* cond, OSMutex* mutex) {
     mutex->count = 0;
     mutex->thread = nullptr;
 
-    // LOST-WAKEUP FIX: the previous implementation unlocked the recursive
-    // mutex `savedCount` times and only THEN re-acquired it to call
-    // cv.wait(). That left a window where the mutex was fully free *before*
-    // the thread was actually waiting on the condvar. A concurrent
-    // OSSignalCond() landing in that window (e.g. mDoMemCd save() posting
-    // COMM_STORE_e on the main thread while the memcard worker is between
-    // the predicate check and cv.wait) is lost -> the worker sleeps forever
-    // -> store() never runs -> save hangs. Keep ONE level of the recursive
-    // lock held continuously so cv.wait() is what atomically releases it;
-    // there is no longer any gap for a signal to slip through.
+    // Keep one recursion level held so cv.wait() is what releases the mutex;
+    // fully unlocking before the wait opens a window where a signal is lost.
     if (savedCount >= 1) {
-        // Drop the extra recursive levels, keep exactly one held.
         for (s32 i = 1; i < savedCount; i++) {
             mutexData.nativeMutex.unlock();
         }
-        // Adopt the single held level; wait() releases it atomically.
-        std::unique_lock<std::recursive_mutex> lock(mutexData.nativeMutex, std::adopt_lock);
+        std::unique_lock lock(mutexData.nativeMutex, std::adopt_lock);
         condData.cv.wait(lock);
-        // wait() returned with the lock re-acquired once. Detach the
-        // unique_lock without unlocking, then restore the recursion depth.
         lock.release();
         for (s32 i = 1; i < savedCount; i++) {
             mutexData.nativeMutex.lock();
         }
     } else {
-        // Contract violation (mutex not held on entry). Preserve the old
-        // behaviour rather than adopting a lock we don't own.
-        std::unique_lock<std::recursive_mutex> lock(mutexData.nativeMutex);
+        // Mutex wasn't held on entry (contract violation); wait anyway.
+        std::unique_lock lock(mutexData.nativeMutex);
         condData.cv.wait(lock);
     }
 

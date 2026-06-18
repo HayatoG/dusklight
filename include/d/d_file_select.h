@@ -11,42 +11,40 @@
 
 class dFile_info_c;
 class J2DPicture;
+
 #if TARGET_PC
-static bool cachedPanes = false;
-
-struct PaneCache {
-    u64 tag;
-    f32 origTransX;
-    f32 origTransY;
-    bool cached;
-};
-
 static PaneCache mSelDtPanes[] = {
-    {MULTI_CHAR('tate_n0'), 0.0f, false},
-    {MULTI_CHAR('tate_n1'), 0.0f, false},
-    {MULTI_CHAR('ken_n0'), 0.0f, false},
-    {MULTI_CHAR('ken_n1'), 0.0f, false},
-    {MULTI_CHAR('fuku_n0'), 0.0f, false},
-    {MULTI_CHAR('fuku_n1'), 0.0f, false},
-    {MULTI_CHAR('fuku_n2'), 0.0f, false},
-    {MULTI_CHAR('gray_n'), 0.0f, false},
-    {MULTI_CHAR('b_base'), 0.0f, false},
-    {MULTI_CHAR('b_base1'), 0.0f, false},
+    {MULTI_CHAR('tate_n0'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('tate_n1'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('ken_n0'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('ken_n1'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('fuku_n0'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('fuku_n1'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('fuku_n2'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('gray_n'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('b_base'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('b_base1'), 0.0f, 0.0f, false},
 };
 
 static PaneCache fileSelPanes[] = {
-    {MULTI_CHAR('w_uzu00'), 0.0f, false},
-    {MULTI_CHAR('w_uzu01'), 0.0f, false},
-    {MULTI_CHAR('w_uzu02'), 0.0f, false},
-    {MULTI_CHAR('w_uzu03'), 0.0f, false},
-    {MULTI_CHAR('w_uzu04'), 0.0f, false},
-    {MULTI_CHAR('w_uzu05'), 0.0f, false},
-    {MULTI_CHAR('w_uzu06'), 0.0f, false},
-    {MULTI_CHAR('w_uzu07'), 0.0f, false},
-    {MULTI_CHAR('w_uzu08'), 0.0f, false},
-    {MULTI_CHAR('w_uzu09'), 0.0f, false},
+    {MULTI_CHAR('w_uzu00'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('w_uzu01'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('w_uzu02'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('w_uzu03'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('w_uzu04'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('w_uzu05'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('w_uzu06'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('w_uzu07'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('w_uzu08'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('w_uzu09'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('w_er_msg'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('w_er_msE'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('w_er_msR'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('er_for0'), 0.0f, 0.0f, false},
+    {MULTI_CHAR('er_for1'), 0.0f, 0.0f, false},
 };
 #endif
+
 class dDlst_FileSel_c : public dDlst_base_c {
 public:
     void draw();
@@ -289,6 +287,11 @@ public:
         MEMCARDCHECKPROC_ERR_YESNO_CURSOR_MOVE_ANM,
         MEMCARDCHECKPROC_SAVEDATA_CLEAR,
 
+#if TARGET_PC
+        MEMCARDCHECKPROC_AUTO_MAKE_GAMEFILE,
+        MEMCARDCHECKPROC_AUTO_MAKE_GAMEFILE_ERR_WAIT,
+#endif
+
         #if PLATFORM_WII || PLATFORM_SHIELD
         MEMCARDCHECKPROC_NAND_STAT_CHECK,
         MEMCARDCHECKPROC_GAMEFILE_INIT_SEL,
@@ -413,6 +416,10 @@ public:
     bool yesnoWakuAlpahAnm(u8);
     #if TARGET_PC
     void fileSelectWide();
+    bool pointerDataSelect();
+    bool pointerMenuSelect();
+    bool pointerCopyDataToSelect();
+    bool pointerYesNoSelect(bool errorSelect);
     #endif
     void _draw();
     void errorMoveAnmInitSet(int, int);
@@ -447,6 +454,10 @@ public:
     void MemCardMakeGameFile();
     void MemCardMakeGameFileWait();
     void MemCardMakeGameFileCheck();
+#if TARGET_PC
+    void MemCardAutoMakeGameFile();
+    void MemCardAutoMakeGameFileErrWait();
+#endif
     void MemCardMsgWindowInitOpen();
     void MemCardMsgWindowOpen();
     void MemCardMsgWindowClose();

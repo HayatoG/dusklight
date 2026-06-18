@@ -18,17 +18,14 @@
 #include "m_Do/m_Do_controller_pad.h"
 #include "m_Do/m_Do_graphic.h"
 #include "d/d_msg_scrn_explain.h"
-#include "dusk/frame_interpolation.h"
-#include "dusk/settings.h"
-
-#ifdef __SWITCH__
-extern "C" void dusk_switch_log(const char*);
-#define MS_LOGF(...) do { char _msb[160]; snprintf(_msb, sizeof(_msb), __VA_ARGS__); dusk_switch_log(_msb); } while (0)
-#else
-#define MS_LOGF(...) ((void)0)
-#endif
 #include "JSystem/J2DGraph/J2DAnmLoader.h"
 #include "f_op/f_op_msg_mng.h"
+
+#if TARGET_PC
+#include "dusk/frame_interpolation.h"
+#include "dusk/menu_pointer.h"
+#include "dusk/settings.h"
+#endif
 
 static int SelStartFrameTbl[3] = {
     59,
@@ -60,6 +57,17 @@ static int YnSelStartFrameTbl[2][2] = {
 };
 
 static int YnSelEndFrameTbl[2][2] = {{2138, 3171}, {2150, 3181}};
+
+#if TARGET_PC
+namespace {
+constexpr u8 pointer_target(u8 group, u8 index) noexcept {
+    return static_cast<u8>((group << 4) | (index & 0x0F));
+}
+
+constexpr u8 s_pointerSaveSelectTarget = 0;
+constexpr u8 s_pointerYesNoSelectTarget = 1;
+}  // namespace
+#endif
 
 static dMs_HIO_c g_msHIO;
 
@@ -722,21 +730,6 @@ void dMenu_save_c::_move() {
             }
         }
 
-#ifdef __SWITCH__
-        // B diag (post-save black on the FIELD/EVENT save). Trace every menu-proc
-        // transition + useType/saveStatus/endStatus so we can see EXACTLY which
-        // proc the event-save ends on (and where it stalls black). The earlier fix
-        // was on the collect-menu path (gameContinue/save_close) which this save
-        // never hits — this trace finds the real path.
-        {
-            static int s_lastProc = -1;
-            if ((int)mMenuProc != s_lastProc) {
-                MS_LOGF("[ms] proc %d -> %d useType=%d saveStatus=%d endStatus=%d\n",
-                        s_lastProc, (int)mMenuProc, (int)mUseType, (int)mSaveStatus, (int)mEndStatus);
-                s_lastProc = (int)mMenuProc;
-            }
-        }
-#endif
         (this->*MenuSaveProc[mMenuProc])();
 #if !TARGET_PC
         saveSelAnm();
@@ -912,23 +905,6 @@ void dMenu_save_c::saveQuestion4() {
 }
 
 void dMenu_save_c::saveGuide() {
-#ifdef __SWITCH__
-    // B FIX (post-save gray-screen hang on the gameover/BLACK_EVENT event-save):
-    // the guide message (msg 0x4E4, opened via openExplain(...,/*field_0x58=*/true))
-    // sits at STATUS_MOVE(3) waiting for a pad trigger to dismiss, but in the
-    // gameover/pause context the input never reaches the explain's move_proc
-    // (getTrigA(PAD_1) stays 0) -> it would wait forever -> infinite gray screen.
-    // Force the dismiss (field_0x58==true, so onForceSelect satisfies move_proc's
-    // close condition) -> explain closes -> the save flow completes and the gameover
-    // resumes. Mirrors the existing onForceSelect pattern at lines ~833/~1632. The
-    // save itself already succeeded (store() EXIT state=4) at this point.
-    if (mpScrnExplain != NULL) {
-        u8 st = mpScrnExplain->getStatus();
-        if (st == 3 || st == 4) {
-            mpScrnExplain->onForceSelect();
-        }
-    }
-#endif
     if (mpScrnExplain->getStatus() == 0) {
         mEndStatus = 1;
         mSaveStatus = 3;
@@ -1453,8 +1429,6 @@ void dMenu_save_c::gameContinueDisp() {
 
 void dMenu_save_c::gameContinue() {
     if (errYesNoSelect(0, 1)) {
-        MS_LOGF("[ms] gameContinue select=%s useType=%d\n",
-                mYesNoCursor == CURSOR_YES ? "YES(continue)" : "NO(quit)", mUseType);
         if (mYesNoCursor == CURSOR_YES) {
             mDoAud_seStart(Z2SE_SY_CONTINUE_OK, NULL, 0, 0);
 
@@ -1807,6 +1781,12 @@ void dMenu_save_c::openSaveSelect3() {
 
 void dMenu_save_c::saveSelect() {
     if (!mDoRst::isReset()) {
+#if TARGET_PC
+        if (pointerSaveSelect()) {
+            return;
+        }
+#endif
+
         stick->checkTrigger();
 
         if (mDoCPd_c::getTrigA(PAD_1)) {
@@ -1833,7 +1813,84 @@ void dMenu_save_c::saveSelect() {
     }
 }
 
+#if TARGET_PC
+bool dMenu_save_c::pointerSaveSelect() {
+    dusk::menu_pointer::begin_context(dusk::menu_pointer::Context::Save);
+    for (u8 i = 0; i < 3; ++i) {
+        if (!dusk::menu_pointer::hit_pane(mpSelData[i], 8.0f)) {
+            continue;
+        }
+        const bool clicked = dusk::menu_pointer::consume_click();
+        if (mSelectedFile != i) {
+            mDoAud_seStart(Z2SE_FILE_SELECT_CURSOR, NULL, 0, 0);
+            mLastSelFile = mSelectedFile;
+            mSelectedFile = i;
+            if (clicked) {
+                dusk::menu_pointer::defer_activation(
+                    dusk::menu_pointer::Context::Save,
+                    pointer_target(s_pointerSaveSelectTarget, i));
+            }
+            dataSelectAnmSet();
+            mMenuProc = PROC_SAVE_SELECT_MOVE_ANM;
+            return true;
+        }
+        if (clicked) {
+            saveSelectStart();
+            return true;
+        }
+    }
+    return false;
+}
+
+bool dMenu_save_c::pointerYesNoSelect(bool errorSelect, u8 errParam, u8 soundParam) {
+    dusk::menu_pointer::begin_context(dusk::menu_pointer::Context::Save);
+    for (u8 i = 0; i < 2; ++i) {
+        if (!dusk::menu_pointer::hit_pane(mpNoYes[i], 8.0f)) {
+            continue;
+        }
+        const bool clicked =
+            (!errorSelect || mYesNoCursor == i) && dusk::menu_pointer::consume_click();
+        if (mYesNoCursor != i) {
+            if (errorSelect) {
+                errCurMove(errParam, soundParam);
+                return false;
+            }
+            mDoAud_seStart(Z2SE_SY_MENU_CURSOR_COMMON, NULL, 0, 0);
+            mYesNoPrevCursor = mYesNoCursor;
+            mYesNoCursor = i;
+            if (clicked) {
+                dusk::menu_pointer::defer_activation(
+                    dusk::menu_pointer::Context::Save,
+                    pointer_target(s_pointerYesNoSelectTarget, i));
+            }
+            yesnoSelectAnmSet(0);
+            mMenuProc = PROC_YES_NO_CURSOR_MOVE_ANM;
+            return true;
+        }
+        if (clicked) {
+            if (errorSelect) {
+                if (mYesNoCursor != CURSOR_NO) {
+                    if (soundParam == 0) {
+                        mDoAud_seStart(Z2SE_SY_CURSOR_OK, NULL, 0, 0);
+                    }
+                } else if (soundParam == 0) {
+                    mDoAud_seStart(Z2SE_SY_CURSOR_CANCEL, NULL, 0, 0);
+                }
+                mSelIcon->setAlphaRate(0.0f);
+            } else {
+                yesnoSelectStart();
+            }
+            return true;
+        }
+    }
+    return false;
+}
+#endif
+
 void dMenu_save_c::saveSelectStart() {
+#if TARGET_PC
+    dusk::menu_pointer::clear_deferred_activation(dusk::menu_pointer::Context::Save);
+#endif
     mDoAud_seStart(Z2SE_SY_CURSOR_OK, NULL, 0, 0);
     selectDataMoveAnmInitSet(SelOpenStartFrameTbl[mSelectedFile],
                              SelOpenEndFrameTbl[mSelectedFile]);
@@ -1892,6 +1949,17 @@ void dMenu_save_c::dataSelectAnmSet() {
 }
 
 void dMenu_save_c::saveSelectMoveAnime() {
+#if TARGET_PC
+    dusk::menu_pointer::begin_context(dusk::menu_pointer::Context::Save);
+    if (mSelectedFile != 0xFF &&
+        dusk::menu_pointer::hit_pane(mpSelData[mSelectedFile], 8.0f) &&
+        dusk::menu_pointer::consume_click())
+    {
+        dusk::menu_pointer::defer_activation(
+            dusk::menu_pointer::Context::Save,
+            pointer_target(s_pointerSaveSelectTarget, mSelectedFile));
+    }
+#endif
     bool bookWakuAnmComplete = true;
     bool selWakuAnmComplete = true;
     bool var_r29 = true;
@@ -1941,12 +2009,26 @@ void dMenu_save_c::saveSelectMoveAnime() {
         if (mLastSelFile != 0xFF) {
             mpSelData[mLastSelFile]->getPanePtr()->setAnimation((J2DAnmTransformKey*)NULL);
         }
+#if TARGET_PC
+        if (dusk::menu_pointer::consume_deferred_activation(
+                dusk::menu_pointer::Context::Save,
+                pointer_target(s_pointerSaveSelectTarget, mSelectedFile))) {
+            saveSelectStart();
+            return;
+        }
+#endif
         mMenuProc = PROC_SAVE_SELECT;
     }
 }
 
 void dMenu_save_c::saveYesNoSelect() {
     if (!mDoRst::isReset()) {
+#if TARGET_PC
+        if (pointerYesNoSelect(false)) {
+            return;
+        }
+#endif
+
         stick->checkTrigger();
 
         if (mDoCPd_c::getTrigA(PAD_1)) {
@@ -1974,6 +2056,9 @@ void dMenu_save_c::saveYesNoSelect() {
 }
 
 void dMenu_save_c::yesnoSelectStart() {
+#if TARGET_PC
+    dusk::menu_pointer::clear_deferred_activation(dusk::menu_pointer::Context::Save);
+#endif
     if (mYesNoCursor != CURSOR_NO) {
         mDoAud_seStart(Z2SE_SY_CURSOR_OK, NULL, 0, 0);
         mSelIcon->setAlphaRate(0.0f);
@@ -2042,11 +2127,30 @@ void dMenu_save_c::yesnoSelectAnmSet(u8 param_0) {
 }
 
 void dMenu_save_c::yesNoCursorMoveAnm() {
+#if TARGET_PC
+    dusk::menu_pointer::begin_context(dusk::menu_pointer::Context::Save);
+    if (mYesNoCursor != 0xFF &&
+        dusk::menu_pointer::hit_pane(mpNoYes[mYesNoCursor], 8.0f) &&
+        dusk::menu_pointer::consume_click())
+    {
+        dusk::menu_pointer::defer_activation(
+            dusk::menu_pointer::Context::Save,
+            pointer_target(s_pointerYesNoSelectTarget, mYesNoCursor));
+    }
+#endif
     bool selAnmComplete = yesnoSelectMoveAnm(0);
     bool wakuAnmComplete = yesnoWakuAlpahAnm(mYesNoPrevCursor);
 
     if (selAnmComplete == true && wakuAnmComplete == true) {
         yesnoCursorShow();
+#if TARGET_PC
+        if (dusk::menu_pointer::consume_deferred_activation(
+                dusk::menu_pointer::Context::Save,
+                pointer_target(s_pointerYesNoSelectTarget, mYesNoCursor))) {
+            yesnoSelectStart();
+            return;
+        }
+#endif
         mMenuProc = PROC_SAVE_YES_NO_SELECT;
     }
 }
@@ -2221,6 +2325,12 @@ bool dMenu_save_c::errYesNoSelect(u8 param_0, u8 param_1) {
     if (mDoRst::isReset()) {
         return false;
     }
+
+#if TARGET_PC
+    if (pointerYesNoSelect(true, param_0, param_1)) {
+        return true;
+    }
+#endif
 
     stick->checkTrigger();
 

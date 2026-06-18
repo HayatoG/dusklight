@@ -4,12 +4,14 @@
 #include "m_Do/m_Do_audio.h"
 
 #include <aurora/aurora.h>
+#include <aurora/gfx.h>
 #include <dolphin/gx/GXAurora.h>
 #include <dolphin/vi.h>
 #include <fmt/format.h>
 
 #include "dusk/config.hpp"
 #include "dusk/settings.h"
+#include "dusk/texture_replacements.hpp"
 
 #include <algorithm>
 #include <string>
@@ -82,6 +84,8 @@ int get_value(GraphicsOption option) {
             100);
     case GraphicsOption::DepthOfFieldMode:
         return static_cast<int>(getSettings().game.depthOfFieldMode.getValue());
+    case GraphicsOption::TextureReplacements:
+        return getSettings().game.enableTextureReplacements.getValue();
     }
     return 0;
 }
@@ -121,6 +125,9 @@ void set_value(GraphicsOption option, int value) {
         break;
     case GraphicsOption::BloomMultiplier:
         getSettings().game.bloomMultiplier.setValue(std::clamp(value, 0, 100) / 100.0f);
+        break;
+    case GraphicsOption::TextureReplacements:
+        texture_replacements::set_enabled(static_cast<bool>(value));
         break;
     }
 }
@@ -259,6 +266,8 @@ Rml::String format_graphics_setting_value(GraphicsOption option, int value) {
         break;
     case GraphicsOption::BloomMultiplier:
         return fmt::format("{}%", value);
+    case GraphicsOption::TextureReplacements:
+        return static_cast<bool>(value) ? "On" : "Off";
     }
     return "";
 }

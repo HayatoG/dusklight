@@ -17,8 +17,6 @@ struct dMsgScrnItem_c : public dMsgScrnBase_c {
     void arwAnimeMove();
     void dotAnimeInit();
     void dotAnimeMove();
-    // Same override-signature fix as dMsgScrnTalk_c: must be char DUSK_CONST* to
-    // override the dMsgScrnBase_c virtual on Dusk (else the base no-op runs).
     void setSelectString(char DUSK_CONST*, char DUSK_CONST*, char DUSK_CONST*);
     void setSelectRubyString(char DUSK_CONST*, char DUSK_CONST*, char DUSK_CONST*);
     bool isSelect();
