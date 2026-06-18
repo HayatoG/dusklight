@@ -45,8 +45,35 @@ Fixes applied so far (all verified against actual v13 source/struct, not guessed
     new_frame,freeze,render} + log_system_information), wired via `elseif(AURORA_PLATFORM_SWITCH)` in
     aurora_core.cmake; (b) v13's `lib/rmlui/RuntimeTextureProvider.cpp` (load_runtime_texture/
     register_texture_provider/unregister_texture_provider) wasn't in our RMLUI source list → added it.
-Build7 (link) in progress.
-NOTE: NONE of these re-port branches are committed yet — commit aurora + dusklight once the build is green.
+Build7 (link) GREEN. Build8 = cache-path fix (data.cpp `0a83eceed2`).
+
+## ✅ GREEN + HW-VALIDATED + RELEASE PACKAGED (2026-06-18)
+- aurora `824a1b1` (pushed), dusklight `0a83eceed2` (pushed, incl. the cachePath HW fix).
+- HW: boots, runs in-game, cache loads (no open errors), **"os modelos carregaram bonitinhamente"** (pop-in fixed).
+- **Cache-path fix:** `src/dusk/data.cpp` set `cachePath=prefPath` (= SDL-shim `sdmc:/game/`, a nonexistent dir → SQLite CANTOPEN 14 → reference config-13 `.db` never loaded). Fixed: on Switch `cachePath=dataPath` (the `/TwilitRealm/Dusklight/` data dir).
+- **USER-READY RELEASE:** `D:\dusklight-build\Dusklight-Release\` + `Dusklight-Switch-Release.zip` (23.9MB). Layout mirrors SD: `switch/dusklight.nro`, `game/data_location.json`, `TwilitRealm/Dusklight/{config.json,dawn_cache.db(5.8MB warm NVK shaders),pipeline_cache.db(2.4MB config-13)}` + README.txt. User adds their own `game.gcm`. The dawn_cache.db = our NVK-compiled shaders (valid for all users since NVK is baked into the NRO).
+- **⏳ OPEN: 30fps.** Frame interp enabled (config `enableFrameInterpolation` 1/2) but produces NO extra frames on Switch. Loop `m_Do_main:337-360` gated by `game_clock::advance_main_loop().is_interpolating`; top `VIWaitForRetrace()` (m_Do_main:329). Hypothesis: main loop iterates ~30Hz (nothing to interpolate into) — VIWaitForRetrace cadence OR ~33ms CPU/frame (present is only ~150µs). Needs HW instrumentation (log is_interpolating/sim_ticks_to_run + per-section timing).
+
+## POST-RE-PORT FEATURES (user asked 2026-06-18: audio, pipeline-notif, (-) overlay)
+User confirmed the RmlUi **FPS overlay DOES render in-game** on Switch → the RmlUi UI pipeline is live in-game (aurora renders g_context every frame via aurora.cpp:264 `rmlui::record_frame`).
+
+### 🔊 AUDIO — IMPLEMENTED (building; HW test pending)
+Reference RE (`C:\Users\Guilherme\Downloads\dusklight-switch\analysis\out\05_audio_backend.c`) shows Encounter uses **SDL3's own libnx/audren** audio driver (strings `audrenInitialize/audrvCreate/audrenStartAudioRenderer failed`, `"MainAudioOut"`, format 0x8120=F32). We mirror just the SDL audio surface `DuskAudioSystem.cpp` uses, over audren. Chain: game → JAudio2 → DuskDsp (`DspRender` → float32 stereo @ 32kHz) → SDL_PutAudioStreamData → **our audren backend** → speakers.
+Files changed:
+- **NEW `platforms/switch/src/switch_audio.cpp`** — audren backend: `audrenInitialize`→`audrvCreate(…,2)`→mempool add/attach→`audrvDeviceSinkAdd("MainAudioOut",2)`→`audrenStartAudioRenderer`→`audrvVoiceInit(0,2,PcmFormat_Float,32000)`→mix factors→`audrvVoiceStart`. Dedicated pthread (256KB stack) pulls PCM the game pushed into a 64KB ring, fills 4×8KB wavebufs (armDCacheFlush before queue), `audrvVoiceAddWaveBuf`+`audrvUpdate`+`audrenWaitFrame`. F32 fed direct (no convert). Implements `SDL_Init/SDL_OpenAudioDeviceStream/SDL_PutAudioStreamData/SDL_Resume|PauseAudioStreamDevice`. **KEY: stream opens PAUSED** (DuskAudioSystem runs DspInit AFTER open, resumes at end of Initialize) — render before DspInit would touch uninit DSP. Init fail → returns non-null sentinel, runs silent (no crash).
+- **`extern/aurora/include/SDL3/SDL.h`** — added audio decls (SDL_AudioSpec{format,channels,freq}, SDL_AUDIO_F32=0x8120, SDL_AudioStream opaque, callback typedef, SDLCALL, the 5 fn prototypes — non-inline, defined in switch_audio.cpp).
+- **`include/dusk/audio.h`** — `DUSK_AUDIO_DISABLED` 1→0 on Switch; `DUSK_AUDIO_SKIP` → empty (audio wired).
+- **`CMakeLists.txt`** — re-include `src/dusk/audio/{DuskAudioSystem,DuskDsp,Adpcm}.cpp` + add `switch_audio.cpp` (keep JASCriticalSection/DspStub/switch_stubs).
+- **`platforms/switch/src/switch_stubs.cpp`** — removed the `dusk::audio` stub block (real sources provide it).
+- Wiring: `libs/JSystem/src/JAudio2/JAUInitializer.cpp:66` calls `dusk::audio::Initialize()` in the JAudio2 init (runs now that audio is enabled). globals (MasterVolume/EnableReverb/EnableHrtf/ChannelAux) in DuskDsp.cpp.
+- **RISK (HW): the old reason audio was off** = `Z2AudioMgr::init` hit a null FX-line in `JASDsp::setFXLine`. Now `DuskAudioSystem::Initialize` runs `JASDsp::initBuffer()`/`initAll()` first — hopefully fixes it. If it still crashes on HW → trace setFXLine. Also watch audren errcodes + buffer underrun.
+
+### 🔔 PIPELINE NOTIFICATION + ACHIEVEMENT TOASTS — DIAGNOSED, not yet implemented
+- Pipeline-compilation progress has ONLY an ImGui impl (`src/dusk/imgui/ImGuiConsole.cpp ShowPipelineProgress`, reads aurora `g_stats.queuedPipelines/createdPipelines`) — EXCLUDED on Switch (ImGui off). Needs an **RmlUi port** (a new element in `src/dusk/ui/overlay.cpp`, reading `aurora_get_stats()`), since FPS overlay proves overlay.cpp renders in-game.
+- Achievement/controller toasts: rendered by `overlay.cpp create_toast` (achievement at line 77, also calls `mDoAud_seStartMenu` — needs audio). Pushed via `dusk::ui::push_toast` (ui.cpp:377). Should appear if pushed in-game; verify the achievement system ticks/triggers on Switch.
+
+### 🎛️ (-) OVERLAY IN-GAME — DIAGNOSED
+- The (-)/MINUS (SDL_GAMEPAD_BUTTON_BACK) toggles the MenuBar layered with Overlay (`m_Do_main:739-740` push_document Overlay+MenuBar on game launch). `ui::handle_event` (in-game m_Do_main:309) feeds RmlUi; early-returns only if `aurora::rmlui::get_context()==null` (input.cpp:710) — but FPS overlay proves context is live in-game. Next: confirm the MINUS→NavCommand::Menu path reaches MenuBar in-game (it works in launcher) — likely an input-routing/focus detail, needs HW trace.
 
 ## Why we're doing this
 A reference Switch build (Encounter's, `v1.4.1-32-dirty`) runs much better

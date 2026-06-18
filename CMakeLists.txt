@@ -540,13 +540,21 @@ if (AURORA_PLATFORM_SWITCH)
     # crashes via __wrap_abort + dusk_terminate_handler + stderr→file).
     list(FILTER DUSK_FILES EXCLUDE REGEX "src/dusk/crash_handler\\.cpp")
     # NOTE: OSThread.cpp re-included — provides OS* thread API used everywhere.
-    # Re-include audio files that have no SDL3/PC deps and provide JSystem
-    # symbols that the filter wrongly excluded:
-    #   JASCriticalSection.cpp — uses <mutex> + Tracy, provides JAudio mutex ctor/dtor
-    #   DspStub.cpp            — pure stub for missing dspproc.cpp, provides DsetMixerLevel etc.
+    # Audio IS enabled on Switch: the JAudio2/DSP software pipeline is portable, and the SDL3 audio
+    # surface DuskAudioSystem uses is implemented over libnx audren in platforms/switch/src/switch_audio.cpp
+    # (mirrors the reference build, which uses SDL3's audren backend). Re-include the audio sources:
+    #   DuskAudioSystem.cpp    — opens the SDL audio stream + the GetNewAudio render callback
+    #   DuskDsp.cpp            — software DSP (DspRender produces float32 stereo @ 32 kHz)
+    #   Adpcm.cpp              — ADPCM4 -> PCM16 decode
+    #   JASCriticalSection.cpp — JAudio mutex ctor/dtor
+    #   DspStub.cpp            — stubs for the missing dspproc.cpp (dormant in the DspRender path; same as desktop)
     list(APPEND DUSK_FILES
+        src/dusk/audio/DuskAudioSystem.cpp
+        src/dusk/audio/DuskDsp.cpp
+        src/dusk/audio/Adpcm.cpp
         src/dusk/audio/JASCriticalSection.cpp
         src/dusk/audio/DspStub.cpp
+        platforms/switch/src/switch_audio.cpp
         platforms/switch/src/switch_stubs.cpp)
 endif ()
 

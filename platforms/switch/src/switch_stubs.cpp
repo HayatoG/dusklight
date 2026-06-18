@@ -120,15 +120,11 @@ extern "C" {
     }
 }
 
-// ── audio (DuskAudioSystem.cpp replacement) ───────────────────────────────
-namespace dusk::audio {
-bool EnableHrtf = false;
-void Initialize() {}
-void SetMasterVolume(float) {}
-void SetPaused(bool) {}
-void SetEnableReverb(bool) {}
-float VolumeFromU16(uint16_t v) { return static_cast<float>(v) / 65535.0f; }
-} // namespace dusk::audio
+// ── audio ──────────────────────────────────────────────────────────────────
+// Audio is now enabled on Switch: dusk/audio/{DuskAudioSystem,DuskDsp,Adpcm}.cpp are compiled and
+// provide dusk::audio::* (Initialize/SetMasterVolume/SetPaused/SetEnableReverb/VolumeFromU16 +
+// the MasterVolume/EnableReverb/EnableHrtf/ChannelAux globals). Output goes through libnx audren in
+// platforms/switch/src/switch_audio.cpp. No stubs here anymore.
 
 // ── gyro (gyro.cpp replacement) ───────────────────────────────────────────
 namespace dusk::gyro {
