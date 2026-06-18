@@ -821,7 +821,12 @@ int game_main(int argc, char* argv[]) {
             if (launchUIResult) {
                 ::dusk_switch_log("[dusk] main: closing launcher documents (PAD unblock)\n");
                 for (auto& doc : dusk::ui::get_document_stack()) {
-                    if (doc && !doc->closed()) {
+                    // Close only the VISIBLE launcher documents (Prelaunch) — those are what keep
+                    // any_document_visible() true and block the GameCube pad. Skip hidden documents
+                    // like the MenuBar (pushed show=false at startup): it must survive into gameplay
+                    // so the (-) menu has something to toggle (top_document() only returns active docs;
+                    // closing the MenuBar here was why top_document()==null in-game and (-) did nothing).
+                    if (doc && !doc->closed() && doc->visible()) {
                         doc->hide(true);
                     }
                 }

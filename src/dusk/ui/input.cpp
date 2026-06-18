@@ -761,19 +761,25 @@ void handle_event(const SDL_Event& event) noexcept {
                 }
             }
             if (!deferred) {
-                // The menu key (KI_F1) opens/closes the in-game menu. Its keydown only reaches a
-                // document if one has RmlUi focus — true in the launcher, but NOT in-game (the game
-                // owns input; the overlay is shown with FocusFlag::None). HW-confirmed: the menu
-                // NavCommand never fired in-game. When nothing is focused, route the toggle to the
-                // top document directly so (-) works in-game (launcher path unchanged).
-                if (key == Rml::Input::KI_F1 && context->GetFocusElement() == nullptr) {
+                // The menu key (KI_F1) toggles the menu/active window. Routing it through RmlUi's
+                // keydown needs a focused element that bubbles it to a menu-capable document. HW diag
+                // showed that in-game the keydown is swallowed (focusNonNull=true, but the focused
+                // element isn't a nav document) so the menu never opened. Toggle the top document
+                // (the MenuBar in-game; the launcher's active doc otherwise) directly instead, and
+                // skip emit_key_press for KI_F1 so the launcher doesn't double-toggle. Works in both.
+                if (key == Rml::Input::KI_F1) {
                     if (auto* doc = top_document()) {
 #ifdef __SWITCH__
-                        Log.warn("[ui-diag] menu key, no focus -> direct toggle (visible={})", doc->visible());
+                        Log.warn("[ui-diag] menu key -> direct toggle top_document (wasVisible={})", doc->visible());
 #endif
                         mDoAud_seStartMenu(doc->visible() ? kSoundMenuClose : kSoundMenuOpen);
                         doc->toggle();
                     }
+#ifdef __SWITCH__
+                    else {
+                        Log.warn("[ui-diag] menu key but top_document()==null");
+                    }
+#endif
                 } else {
                     emit_key_press(*context, key);
                 }
