@@ -260,6 +260,28 @@ fps[corner=br] {
     right: 12dp;
 }
 
+pipeline-compilation {
+    display: none;
+    position: absolute;
+    bottom: 40dp;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 99;
+    border: 1dp #92875B;
+    background-color: rgba(21, 22, 16, 85%);
+    border-radius: 10dp;
+    padding: 10dp 18dp;
+    font-size: 16dp;
+    font-weight: bold;
+    color: #ffffff;
+    pointer-events: none;
+    white-space: nowrap;
+}
+
+pipeline-compilation[open] {
+    display: block;
+}
+
 logo {
     position: absolute;
     width: 100dp;

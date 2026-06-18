@@ -33,6 +33,7 @@ const Rml::String kDocumentSource = R"RML(
 </head>
 <body>
     <fps id="fps" />
+    <pipeline-compilation id="pipeline-compilation" />
     <speedrun-timer id="speedrun-timer">
         <speedrun-rta id="speedrun-rta" />
         <speedrun-igt id="speedrun-igt" />
@@ -197,6 +198,7 @@ static std::string FormatTime(OSTime ticks) {
 
 Overlay::Overlay() : Document(kDocumentSource, true) {
     mFpsCounter = mDocument->GetElementById("fps");
+    mPipelineCompilation = mDocument->GetElementById("pipeline-compilation");
     mSpeedrunTimer = mDocument->GetElementById("speedrun-timer");
     mSpeedrunRta = mDocument->GetElementById("speedrun-rta");
     mSpeedrunIgt = mDocument->GetElementById("speedrun-igt");
@@ -255,6 +257,32 @@ void Overlay::update() {
         } else {
             mFpsCounter->RemoveAttribute("open");
             mFpsLastUpdate = 0;
+        }
+    }
+
+    // Pipeline-compilation indicator: visible while aurora is still building render pipelines
+    // (queuedPipelines > 0) and the user enabled backend.showPipelineCompilation. This is the
+    // RmlUi equivalent of the desktop ImGui ShowPipelineProgress (ImGui is off on Switch).
+    if (mPipelineCompilation != nullptr) {
+        const auto* stats = aurora_get_stats();
+        const bool show = getSettings().backend.showPipelineCompilation.getValue() &&
+                          stats != nullptr && stats->queuedPipelines > 0;
+        if (show) {
+            mPipelineCompilation->SetAttribute("open", "");
+            const Uint64 perfFreq = SDL_GetPerformanceFrequency();
+            const Uint64 now = SDL_GetPerformanceCounter();
+            const bool refreshLabel =
+                perfFreq == 0 || mPipelineLastUpdate == 0 ||
+                static_cast<double>(now - mPipelineLastUpdate) >= 0.1 * static_cast<double>(perfFreq);
+            if (refreshLabel) {
+                mPipelineLastUpdate = now;
+                const uint32_t done = stats->createdPipelines;
+                const uint32_t total = done + stats->queuedPipelines;
+                mPipelineCompilation->SetInnerRML(escape(fmt::format("Compiling shaders… {}/{}", done, total)));
+            }
+        } else {
+            mPipelineCompilation->RemoveAttribute("open");
+            mPipelineLastUpdate = 0;
         }
     }
 

@@ -68,12 +68,17 @@ Files changed:
 - Wiring: `libs/JSystem/src/JAudio2/JAUInitializer.cpp:66` calls `dusk::audio::Initialize()` in the JAudio2 init (runs now that audio is enabled). globals (MasterVolume/EnableReverb/EnableHrtf/ChannelAux) in DuskDsp.cpp.
 - **RISK (HW): the old reason audio was off** = `Z2AudioMgr::init` hit a null FX-line in `JASDsp::setFXLine`. Now `DuskAudioSystem::Initialize` runs `JASDsp::initBuffer()`/`initAll()` first — hopefully fixes it. If it still crashes on HW → trace setFXLine. Also watch audren errcodes + buffer underrun.
 
-### 🔔 PIPELINE NOTIFICATION + ACHIEVEMENT TOASTS — DIAGNOSED, not yet implemented
-- Pipeline-compilation progress has ONLY an ImGui impl (`src/dusk/imgui/ImGuiConsole.cpp ShowPipelineProgress`, reads aurora `g_stats.queuedPipelines/createdPipelines`) — EXCLUDED on Switch (ImGui off). Needs an **RmlUi port** (a new element in `src/dusk/ui/overlay.cpp`, reading `aurora_get_stats()`), since FPS overlay proves overlay.cpp renders in-game.
-- Achievement/controller toasts: rendered by `overlay.cpp create_toast` (achievement at line 77, also calls `mDoAud_seStartMenu` — needs audio). Pushed via `dusk::ui::push_toast` (ui.cpp:377). Should appear if pushed in-game; verify the achievement system ticks/triggers on Switch.
+### 🔔 PIPELINE NOTIFICATION — ✅ IMPLEMENTED (RmlUi port; build green, HW test pending)
+The pipeline-compilation progress only had an ImGui impl (ImGuiConsole.cpp, excluded on Switch). Ported to an RmlUi overlay element:
+- `src/dusk/ui/overlay.cpp` — added `<pipeline-compilation id="pipeline-compilation"/>` to kDocumentSource; `Overlay::update()` shows it while `getSettings().backend.showPipelineCompilation && aurora_get_stats()->queuedPipelines > 0`, label "Compiling shaders… {createdPipelines}/{created+queued}" (throttled 0.1s), mirroring the FPS element.
+- `src/dusk/ui/overlay.hpp` — `mPipelineCompilation` + `mPipelineLastUpdate` members.
+- `res/rml/overlay.rcss` — `pipeline-compilation` style (bottom-center card; `[open]` shows). Bundled via make-nro romfs.
+- Achievement/controller toasts already render via overlay.cpp create_toast; the unlock sound (`mDoAud_seStartMenu`) now works thanks to audio.
 
-### 🎛️ (-) OVERLAY IN-GAME — DIAGNOSED
-- The (-)/MINUS (SDL_GAMEPAD_BUTTON_BACK) toggles the MenuBar layered with Overlay (`m_Do_main:739-740` push_document Overlay+MenuBar on game launch). `ui::handle_event` (in-game m_Do_main:309) feeds RmlUi; early-returns only if `aurora::rmlui::get_context()==null` (input.cpp:710) — but FPS overlay proves context is live in-game. Next: confirm the MINUS→NavCommand::Menu path reaches MenuBar in-game (it works in launcher) — likely an input-routing/focus detail, needs HW trace.
+### 🎛️ (-) OVERLAY IN-GAME — DIAGNOSED + INSTRUMENTED (needs 1 HW trace, then fix)
+Root cause narrowed: MINUS→`KI_F1`(input.cpp:207-211)→`NavCommand::Menu`(ui.cpp:333)→`Document::handle_nav_command`→`toggle()`(document.cpp:141-144). RmlUi keydowns only reach a document's listener if it's **focused** (document.cpp:45-56: passive Overlay forwards to top_document only when *it* gets the keydown). In-game the game holds input focus, so the menu keydown likely never reaches the MenuBar (works in launcher because a UI doc is focused there).
+- Added a DIAG log at `document.cpp:143` (`[ui-diag] NavCommand::Menu -> toggle`, `#ifdef __SWITCH__`). HW test: press MINUS in-game — if it logs, toggle fires (look elsewhere); if it logs in launcher but NOT in-game → keydown isn't routing (focus) → fix = give the Overlay/MenuBar a focused element in-game OR poll the menu button directly in the in-game loop and call toggle. NOT fixed speculatively (would risk the launcher's working nav).
+- Added `aurora::Module Log{"dusk::ui::document"}` to document.cpp for the diag.
 
 ## Why we're doing this
 A reference Switch build (Encounter's, `v1.4.1-32-dirty`) runs much better

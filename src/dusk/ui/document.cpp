@@ -1,5 +1,6 @@
 #include "document.hpp"
 
+#include "aurora/lib/logging.hpp"
 #include "aurora/rmlui.hpp"
 #include "ui.hpp"
 
@@ -7,6 +8,8 @@
 
 namespace dusk::ui {
 namespace {
+
+[[maybe_unused]] aurora::Module Log{"dusk::ui::document"};
 
 Rml::ElementDocument* load_document(const Rml::String& source) {
     auto* context = aurora::rmlui::get_context();
@@ -139,6 +142,12 @@ bool Document::handle_nav_event(Rml::Event& event) {
 
 bool Document::handle_nav_command(Rml::Event& event, NavCommand cmd) {
     if (cmd == NavCommand::Menu) {
+#ifdef __SWITCH__
+        // DIAG (overlay-in-game): confirms the MINUS->KI_F1->NavCommand::Menu keydown actually
+        // reaches a document and toggles. If this logs in the launcher but NOT in-game, the keydown
+        // isn't routing to a focused document in-game (RmlUi focus). Remove once (-) works in-game.
+        Log.warn("[ui-diag] NavCommand::Menu -> toggle (visible={})", visible());
+#endif
         mDoAud_seStartMenu(visible() ? kSoundMenuClose : kSoundMenuOpen);
         toggle();
         return true;
