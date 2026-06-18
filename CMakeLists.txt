@@ -118,7 +118,38 @@ set(AURORA_ENABLE_CARD ON CACHE BOOL "Enable CARD API support" FORCE)
 if (NOT AURORA_PLATFORM_SWITCH)
     set(AURORA_ENABLE_RMLUI ON CACHE BOOL "Enable RmlUi UI support" FORCE)
 endif ()
+# WS1 (parity with Encounter's reference .nro): enable Aurora's persistent WebGPU cache.
+# Aurora defaults this OFF on Switch (aurora CMakeLists _aurora_default_gpu_cache OFF), which
+# selects pipeline_cache_memory.cpp (synchronous cb() on the render thread) + gpu_cache_null.cpp
+# (no-op) = the per-frame shader-compile stutter. ON selects pipeline_cache.cpp (async worker
+# threads + SQLite pipeline_cache.db, seeded at boot) + gpu_cache.cpp (Dawn BlobCache ->
+# dawn_cache.db, zstd). The reference build ships both .db pre-seeded; we match that.
+set(AURORA_ENABLE_GPU_CACHE ON CACHE BOOL "Enable persistent WebGPU shader cache" FORCE)
+set(AURORA_CACHE_USE_ZSTD ON CACHE BOOL "Compress WebGPU cache entries with zstd" FORCE)
+# On Switch, reuse the devkitPro portlib libzstd.a for Aurora's cache instead of letting Aurora
+# FetchContent zstd (which also builds a `zstd` CLI EXECUTABLE target that collides with GAME_LIBS'
+# plain `zstd` portlib link -> "Target zstd of type EXECUTABLE may not be linked"). Pre-defining
+# libzstd_static makes aurora/extern/CMakeLists take its "Using existing zstd" branch (no fetch).
+if (AURORA_PLATFORM_SWITCH AND NOT TARGET libzstd_static)
+    find_library(DUSK_SWITCH_LIBZSTD NAMES zstd libzstd
+        PATHS "$ENV{DEVKITPRO}/portlibs/switch/lib" /opt/devkitpro/portlibs/switch/lib NO_DEFAULT_PATH)
+    if (DUSK_SWITCH_LIBZSTD)
+        add_library(libzstd_static STATIC IMPORTED GLOBAL)
+        set_target_properties(libzstd_static PROPERTIES IMPORTED_LOCATION "${DUSK_SWITCH_LIBZSTD}")
+    endif ()
+endif ()
 add_subdirectory(extern/aurora EXCLUDE_FROM_ALL)
+# WS1: the SQLite amalgamation includes <sys/mman.h> (sqlite3.c:39299 guard
+# `!defined(SQLITE_OMIT_WAL) || SQLITE_MAX_MMAP_SIZE>0`), which newlib/devkitA64 lacks.
+# The shader cache needs neither memory-mapped I/O nor WAL shared-memory, so compile both out.
+# The on-disk .db format is unchanged (journal_mode is a runtime/per-connection setting), so we
+# can still consume the reference build's pre-seeded pipeline_cache.db / dawn_cache.db.
+if (AURORA_PLATFORM_SWITCH AND TARGET sqlite3)
+    target_compile_definitions(sqlite3 PRIVATE
+        SQLITE_OMIT_WAL              # WAL shared-memory needs <sys/mman.h> (absent in newlib)
+        SQLITE_MAX_MMAP_SIZE=0       # disable memory-mapped I/O (<sys/mman.h>)
+        SQLITE_OMIT_LOAD_EXTENSION)  # dlopen extension loading needs <dlfcn.h> (absent in newlib)
+endif ()
 target_compile_definitions(aurora_mtx PRIVATE MTX_USE_PS=1)
 
 add_subdirectory(libs/freeverb)

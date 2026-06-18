@@ -641,6 +641,11 @@ int game_main(int argc, char* argv[]) {
         AuroraConfig config{};
         config.appName = dusk::AppName;
         config.userPath = reinterpret_cast<const char*>(userPathString.c_str());
+        // Aurora uses g_config.configPath (NOT userPath) for the SQLite pipeline/blob cache.
+        // dusk previously left configPath null -> Aurora fell back to its default "sdmc:/aurora",
+        // a dir that doesn't exist -> sqlite3_open returned SQLITE_CANTOPEN(14) -> cache disabled ->
+        // every shader recompiled every run (the perf killer). Point it at the same data dir.
+        config.configPath = reinterpret_cast<const char*>(userPathString.c_str());
         config.cachePath = reinterpret_cast<const char*>(cachePathString.c_str());
         config.vsync = dusk::getSettings().video.enableVsync;
         config.startFullscreen = dusk::getSettings().video.enableFullscreen;
