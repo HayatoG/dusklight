@@ -69,6 +69,9 @@ u64 g_ringHead = 0; // read counter
 u64 g_ringTail = 0; // write counter
 std::mutex g_ringMutex;
 
+// Scratch for draining float32 from the ring before converting to s16 (single audio thread).
+float g_convBuf[kSlotFrames * kChannels];
+
 inline u64 ring_used_locked() { return g_ringTail - g_ringHead; }
 
 void ring_push(const u8* src, int len) {
@@ -126,17 +129,27 @@ void* audio_thread(void*) {
       if (wb.state != AudioDriverWaveBufState_Free && wb.state != AudioDriverWaveBufState_Done) {
         continue; // still in flight
       }
-      u8* slot = g_pool + i * kSlotBytes;
-      const int n = ring_drain(slot, kSlotBytes);
-      if (n < kBytesPerFrame) {
+      // Drain the float32 frames the game pushed, convert to s16 into the slot (the audren voice is
+      // Int16 — the Switch audren rejects float source voices).
+      const int gotBytes = ring_drain(reinterpret_cast<u8*>(g_convBuf), kSlotFrames * kBytesPerFrame);
+      const int frames = gotBytes / kBytesPerFrame;
+      if (frames < 1) {
         continue; // nothing (or partial frame) ready
       }
-      armDCacheFlush(slot, n);
+      auto* out = reinterpret_cast<s16*>(g_pool + i * kSlotBytes);
+      const int samples = frames * kChannels;
+      for (int s = 0; s < samples; ++s) {
+        float v = g_convBuf[s];
+        v = v > 1.0f ? 1.0f : (v < -1.0f ? -1.0f : v);
+        out[s] = static_cast<s16>(v * 32767.0f);
+      }
+      const int s16Bytes = samples * static_cast<int>(sizeof(s16));
+      armDCacheFlush(out, s16Bytes);
       wb = {};
-      wb.data_raw = slot;
-      wb.size = static_cast<u64>(n);
+      wb.data_pcm16 = out;
+      wb.size = static_cast<u64>(s16Bytes);
       wb.start_sample_offset = 0;
-      wb.end_sample_offset = n / kBytesPerFrame;
+      wb.end_sample_offset = frames;
       audrvVoiceAddWaveBuf(&g_drv, 0, &wb);
     }
 
@@ -170,7 +183,10 @@ bool audren_setup(int freq) {
     return false;
   }
 
-  if (!audrvVoiceInit(&g_drv, 0, kChannels, PcmFormat_Float, freq)) {
+  // The Switch audren hardware doesn't accept float source voices (audrvVoiceInit fails), even
+  // though PcmFormat_Float exists in the enum — SDL3's audren backend (what the reference uses) also
+  // runs Int16 and converts. So the voice is Int16; we convert the game's float32 PCM -> s16 below.
+  if (!audrvVoiceInit(&g_drv, 0, kChannels, PcmFormat_Int16, freq)) {
     std::printf("[audio] audrvVoiceInit failed\n");
     return false;
   }

@@ -1,6 +1,9 @@
 #include "input.hpp"
 
 #include "ui.hpp"
+#include "document.hpp"
+#include "m_Do/m_Do_audio.h"
+#include "aurora/lib/logging.hpp"
 
 #include <RmlUi/Core.h>
 #include <SDL3/SDL_gamepad.h>
@@ -16,6 +19,8 @@
 
 namespace dusk::ui::input {
 namespace {
+
+[[maybe_unused]] aurora::Module Log{"dusk::ui::input"};
 
 constexpr double kGamepadRepeatInitialDelay = 0.32;
 constexpr double kGamepadRepeatStartInterval = 0.12;
@@ -756,7 +761,22 @@ void handle_event(const SDL_Event& event) noexcept {
                 }
             }
             if (!deferred) {
-                emit_key_press(*context, key);
+                // The menu key (KI_F1) opens/closes the in-game menu. Its keydown only reaches a
+                // document if one has RmlUi focus — true in the launcher, but NOT in-game (the game
+                // owns input; the overlay is shown with FocusFlag::None). HW-confirmed: the menu
+                // NavCommand never fired in-game. When nothing is focused, route the toggle to the
+                // top document directly so (-) works in-game (launcher path unchanged).
+                if (key == Rml::Input::KI_F1 && context->GetFocusElement() == nullptr) {
+                    if (auto* doc = top_document()) {
+#ifdef __SWITCH__
+                        Log.warn("[ui-diag] menu key, no focus -> direct toggle (visible={})", doc->visible());
+#endif
+                        mDoAud_seStartMenu(doc->visible() ? kSoundMenuClose : kSoundMenuOpen);
+                        doc->toggle();
+                    }
+                } else {
+                    emit_key_press(*context, key);
+                }
             }
         }
     } else {
