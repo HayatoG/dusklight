@@ -1001,7 +1001,16 @@ Paths initialize_data() {
 
     return Paths{
         .userPath = dataPath,
+#ifdef __SWITCH__
+        // On Switch the prefPath is the hardcoded sdmc:/game/ (SDL shim) — it isn't a real
+        // directory, so the SQLite shader cache CANTOPENs (errcode 14) there, and the bundled /
+        // reference pipeline_cache.db + dawn_cache.db live in the data dir (the data_location.json
+        // redirect only moves userPath). Keep the cache alongside the data so the config-13 cache
+        // actually loads instead of recompiling every pipeline on demand (the texture/model pop-in).
+        .cachePath = dataPath,
+#else
         .cachePath = prefPath,
+#endif
     };
 }
 
