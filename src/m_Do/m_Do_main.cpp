@@ -641,11 +641,11 @@ int game_main(int argc, char* argv[]) {
         AuroraConfig config{};
         config.appName = dusk::AppName;
         config.userPath = reinterpret_cast<const char*>(userPathString.c_str());
-        // Aurora uses g_config.configPath (NOT userPath) for the SQLite pipeline/blob cache.
-        // dusk previously left configPath null -> Aurora fell back to its default "sdmc:/aurora",
-        // a dir that doesn't exist -> sqlite3_open returned SQLITE_CANTOPEN(14) -> cache disabled ->
-        // every shader recompiled every run (the perf killer). Point it at the same data dir.
-        config.configPath = reinterpret_cast<const char*>(userPathString.c_str());
+        // v13: AuroraConfig.configPath was REMOVED. The SQLite pipeline/blob cache now lives at
+        // cachePath (aurora cache_path() = g_config.cachePath / "dawn_cache.db"). Leaving cachePath
+        // null -> aurora falls back to "sdmc:/aurora", a dir that doesn't exist -> SQLITE_CANTOPEN(14)
+        // -> cache disabled -> every shader recompiled every run (the perf killer). Point it at the
+        // real cache dir so the bundled/persisted cache opens.
         config.cachePath = reinterpret_cast<const char*>(cachePathString.c_str());
         config.vsync = dusk::getSettings().video.enableVsync;
         config.startFullscreen = dusk::getSettings().video.enableFullscreen;
@@ -674,7 +674,9 @@ int game_main(int argc, char* argv[]) {
         config.allowJoystickBackgroundEvents = dusk::getSettings().game.allowBackgroundInput;
         config.pauseOnFocusLost = dusk::getSettings().game.pauseOnFocusLost;
         config.imGuiInitCallback = &aurora_imgui_init_callback;
-        config.allowTextureReplacements = dusk::getSettings().game.enableTextureReplacements;
+        // v13: AuroraConfig.allowTextureReplacements was REMOVED. Replacements now auto-load from
+        // resourcesPath when present; allowTextureDumps only gates dumping. dusk's
+        // game.enableTextureReplacements no longer maps to an aurora config flag.
         config.allowTextureDumps = false;
         auroraInfo = aurora_initialize(argc, argv, &config);
     }
