@@ -555,6 +555,7 @@ if (AURORA_PLATFORM_SWITCH)
         src/dusk/audio/JASCriticalSection.cpp
         src/dusk/audio/DspStub.cpp
         platforms/switch/src/switch_audio.cpp
+        platforms/switch/src/switch_perf.cpp
         platforms/switch/src/switch_stubs.cpp)
 endif ()
 

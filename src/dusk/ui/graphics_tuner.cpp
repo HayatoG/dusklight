@@ -29,13 +29,18 @@ struct InternalResolutionPreset_ {
 };
 inline const InternalResolutionPreset_& internal_resolution_preset_locked(int value) {
     static constexpr InternalResolutionPreset_ kPresets[] = {
-        { "Auto",  0.0f,   0,    0 },
-        { "360p",  0.5f,   640,  360 },
-        { "480p",  0.667f, 854,  480 },
-        { "720p",  1.0f,   1280, 720 },
-        { "1080p", 1.5f,   1920, 1080 },
-        { "1440p", 2.0f,   2560, 1440 },
-        { "4K",    3.0f,   3840, 2160 },
+        { "Auto",  0.0f,    0,    0 },
+        { "360p",  0.5f,    640,  360 },
+        { "480p",  0.667f,  854,  480 },
+        { "540p",  0.75f,   960,  540 },
+        { "720p",  1.0f,    1280, 720 },
+        { "768p",  1.0667f, 1366, 768 },
+        { "810p",  1.125f,  1440, 810 },
+        { "900p",  1.25f,   1600, 900 },
+        { "1080p", 1.5f,    1920, 1080 },
+        // High-DPI presets disabled for now (re-enable to expose 1440p/4K again):
+        // { "1440p", 2.0f,    2560, 1440 },
+        // { "4K",    3.0f,    3840, 2160 },
     };
     const int max_idx = static_cast<int>(sizeof(kPresets) / sizeof(kPresets[0])) - 1;
     return kPresets[std::clamp(value, 0, max_idx)];

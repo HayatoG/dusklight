@@ -14,6 +14,7 @@ UserSettings g_userSettings = {
         .rememberWindowSize {"video.rememberWindowSize", false},
         .lastWindowWidth {"video.lastWindowWidth", 0},
         .lastWindowHeight {"video.lastWindowHeight", 0},
+        .cpuBoost {"video.switchCpuBoost", false},
     },
 
     .audio = {
@@ -223,6 +224,7 @@ void registerSettings() {
     Register(g_userSettings.video.rememberWindowSize);
     Register(g_userSettings.video.lastWindowWidth);
     Register(g_userSettings.video.lastWindowHeight);
+    Register(g_userSettings.video.cpuBoost);
 
     // Audio
     Register(g_userSettings.audio.masterVolume);

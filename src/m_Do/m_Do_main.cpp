@@ -32,6 +32,7 @@ extern "C" void dusk_switch_log(const char*);
 #include "d/d_s_logo.h"
 #include "d/d_s_menu.h"
 #include "d/d_s_play.h"
+#include "dusk/perf.hpp"
 #include "dusk/time.h"
 #include "f_ap/f_ap_game.h"
 #include "f_op/f_op_msg.h"
@@ -619,6 +620,9 @@ int game_main(int argc, char* argv[]) {
         dusk::resetForSpeedrunMode();
     }
     ApplyCVarOverrides(parsed_arg_options["cvar"]);
+    // Apply the persisted CPU-boost preference (Switch-only; no-op elsewhere) so the
+    // user's saved choice is in effect from the first frame.
+    dusk::perf::set_cpu_boost(dusk::getSettings().video.cpuBoost.getValue());
     dusk::crash_reporting::initialize();
     dusk::crash_handler::install();
     // TODO: How to handle this?

@@ -131,6 +131,9 @@ struct UserSettings {
         ConfigVar<bool> rememberWindowSize;
         ConfigVar<int> lastWindowWidth;
         ConfigVar<int> lastWindowHeight;
+        // Switch-only: request the Tegra X1 CPU boost clock (1785 MHz) to win back
+        // headroom on the CPU-bound frame loop. No-op on other platforms.
+        ConfigVar<bool> cpuBoost;
     } video;
 
     struct {

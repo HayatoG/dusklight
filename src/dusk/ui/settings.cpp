@@ -14,6 +14,7 @@
 #include "dusk/imgui/ImGuiEngine.hpp"
 #include "dusk/io.hpp"
 #include "dusk/livesplit.h"
+#include "dusk/perf.hpp"
 #include "dusk/discord_presence.hpp"
 #include "graphics_tuner.hpp"
 #include "m_Do/m_Do_main.h"
@@ -843,7 +844,9 @@ SettingsWindow::SettingsWindow(bool prelaunch) : mPrelaunch(prelaunch) {
                 .title = "Internal Resolution",
                 .helpText = kInternalResolutionHelpText,
                 .valueMin = 0,
-                .valueMax = 6,  // 0=Auto, 1=360p, 2=480p, 3=720p, 4=1080p, 5=1440p, 6=4K
+                // 0=Auto 1=360p 2=480p 3=540p 4=720p 5=768p 6=810p 7=900p 8=1080p
+                // (keep in sync with kPresets in graphics_tuner.cpp)
+                .valueMax = 8,
                 .defaultValue = 0,
             }, mPrelaunch);
         graphics_tuner_control(*this, leftPane, rightPane,
@@ -945,6 +948,18 @@ SettingsWindow::SettingsWindow(bool prelaunch) : mPrelaunch(prelaunch) {
             "Framerate Cap", "Limit the framerate to the specified value.", 30, 540, 1,
             [] { return getSettings().game.enableFrameInterpolation.getValue() != FrameInterpMode::Capped; },
             [](int) { android::update_surface_frame_rate(); });
+#ifdef __SWITCH__
+        config_bool_select(leftPane, rightPane, getSettings().video.cpuBoost,
+            {
+                .key = "CPU Boost",
+                .helpText = "Run the Switch CPU at its 1785 MHz boost clock instead of the "
+                            "1020 MHz default. The frame loop is CPU-bound, so this can raise the "
+                            "framerate. In exchange it draws more power and runs hotter, and caps "
+                            "the GPU to its minimum clock (harmless here \xE2\x80\x94 the GPU sits "
+                            "nearly idle). Takes effect immediately and is remembered between sessions.",
+                .onChange = [](bool value) { dusk::perf::set_cpu_boost(value); },
+            });
+#endif
         config_bool_select(leftPane, rightPane, getSettings().game.enableMapBackground,
             {
                 .key = "Enable Mini-Map Shadows",
