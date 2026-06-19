@@ -1,4 +1,14 @@
-# 👉 RESUME HERE — Switch port (GLES backend)
+> ## ⚠️ SUPERSEDED — read `RESUME_REPORT_V141.md` instead
+> This doc is FROZEN HISTORY of the abandoned **GLES backend** exploration (2026-05-25). The project
+> pivoted to the **NVK-Vulkan** path and, as of **2026-06-18, the Switch port is 100% DONE + SHIPPED**:
+> re-ported to dusklight v1.4.1 + encounter/aurora@13, GREEN, HW-validated (cache loads, audio plays,
+> (−) menu, resolution/aspect WSI fix), merged to `main`/`master` of all 3 repos, and published as a
+> GitHub release. **Current entry points:** `RESUME_REPORT_V141.md` (the re-port, authoritative) and
+> `RESUME_NVK_VULKAN.md` (the NVK driver). The GLES notes below are kept only as a record of a path tried.
+
+---
+
+# 👉 RESUME HERE — Switch port (GLES backend) — ⚠️ SUPERSEDED (see banner above)
 
 **Branch:** `switch-port/deko3d-backend`. Session end 2026-05-25 (GLES bring-up). Local commits only — **NOT pushed**.
 

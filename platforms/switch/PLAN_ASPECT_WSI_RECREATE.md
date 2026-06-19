@@ -1,6 +1,11 @@
 # PLAN — Fix in-game resolution/aspect change crash (WSI swapchain recreate)
 
-**Status:** PLAN ONLY (not implemented). Created 2026-06-18.
+**Status:** ✅ DONE — Option A IMPLEMENTED + HW-VALIDATED ("Funcionou perfeito!"). Created 2026-06-18.
+Fix landed in switch-nvk `6c58d9a` (HayatoG/switch-nvk master) — `g_zc_owner` owner-transfer in
+`mesa-25/src/vulkan/wsi/wsi_common_switch.c` (regenerated into `patches/switch-nvk-mesa-25.0.7.patch`).
+dusklight relinked against the new `libvulkan.a`. HW: every resolution/aspect recreate now
+`nwindowConfigureBuffer -> 0x0`, zero-copy re-enabled, no `0xf59`, no crash — launcher AND in-game.
+The plan below is kept for history.
 **Symptom (HW-confirmed):** toggling `video.lockAspectRatio` (4:3) IN-GAME crashes; the saved
 setting then crash-loops on boot. Log:
 ```

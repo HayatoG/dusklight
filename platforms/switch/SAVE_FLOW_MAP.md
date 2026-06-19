@@ -5,6 +5,45 @@
 > the Dusk fork adds `TARGET_PC`, and our Switch build sets `VERSION=0` so
 > **PLATFORM_GCN is TRUE on Switch**. That single fact decides everything.
 
+---
+
+## ⚠️ UPDATED 2026-06-18 — the save path MOVED; save + read WORK (HW-verified)
+
+Everything below this banner is HISTORY: the `sdmc:/aurora/...` path was correct in May, but two
+things changed, so the live path is different now.
+
+1. **The memcard dir now follows `g_config.userPath`, not `configPath`.** aurora commit
+   `3643a36 "Split up configPath -> userPath/cachePath"` changed `CARDInit`'s `cardWorkingDir`
+   source from `g_config.configPath` → `g_config.userPath` (`card.cpp:176-187`). `GetCardFullPath`
+   is unchanged: `userPath / GetCardRegion() / "Card A"`. The engine STILL only calls
+   `CARDSetLoadType` + `CARDInit` (no `CARDDetectDolphin`/`CARDSetBasePath`), so the fallback fires
+   and `ResolveDolphinCardPath` (the `sdmc:/game/GC/...` one) is NOT used.
+2. **`userPath` now points at the data dir, redirected by `data_location.json`.** dusk sets
+   `config.userPath = dusk::data::initialize_data().userPath` (`m_Do_main.cpp:643`). With the bundled
+   `sdmc:/game/data_location.json` = `{"mode":"custom","customPath":"/TwilitRealm/Dusklight"}` (added
+   in dusklight `b931b0ca5a`, 2026-06-18 "cache/config fixes"), `resolve_data_path` returns the custom
+   path. So `userPath = /TwilitRealm/Dusklight`.
+
+→ **The save TODAY lives at `sdmc:/TwilitRealm/Dusklight/USA/Card A/01-GZ2E-gczelda2.gci`** — NOT
+`sdmc:/aurora/...`. Because the memcard and the shader cache SHARE `userPath`, redirecting it for
+the cache (the config-13 "modelos bonitinhamente" fix) also moved the save.
+
+**SAVE + READ WORK (HW-verified 2026-06-18 via the on-device HTTP server).** Both `.gci` confirmed at
+32832 bytes: `sdmc:/TwilitRealm/Dusklight/USA/Card A/` (new, live) and `sdmc:/aurora/USA/Card A/`
+(old, orphaned). The user's "it never reads my save" was the OLD save being orphaned by the userPath
+move — NEW saves round-trip fine. `CardGciFolder` writes via `SDL_IOStream` = real
+`fopen`/`fwrite`/`fflush`/`fclose` (SDL3 shim in `extern/aurora/include/SDL3/SDL.h`) and persists. To
+migrate old progress: copy `sdmc:/aurora/USA/Card A/01-GZ2E-gczelda2.gci` → the new path.
+
+**⚠️ TOOLING GOTCHA (cost most of the session):** Sphaira FTP AND DBI FTP — both via `curl` — returned
+an EMPTY listing for `Card A/` and 0 bytes on the `.gci` download. FALSE NEGATIVE: curl/FTP can't
+`CWD`/`RETR` a path with a **space** in it ("Card A"). I wrongly concluded "not saving" twice (even
+"two independent FTP servers confirm"). The on-device **HTTP server** (`Card%20A`) showed the truth
+instantly. **Census Switch files via HTTP, not curl-FTP, when a path has a space.** Logged in
+[[dusklight-debugging-heuristics]].
+
+---
+
 ## TL;DR — what actually runs on Switch
 
 We compile with `-DVERSION=0` → `VERSION_GCN_USA` → `PLATFORM_GCN=1`.

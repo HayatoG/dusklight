@@ -4,6 +4,22 @@
 `dusklight-report-v141-progress`, `dusklight-cache-and-crash-fixes`,
 `dusklight-reference-build-analysis` (in the agent memory dir).
 
+## 🎉 STATUS: 100% — SHIPPED TO MAIN + RELEASE PUBLISHED (2026-06-18)
+The re-port to v1.4.1 + `encounter/aurora@13` (config_version 13) is **DONE, HW-validated, on
+`main`/`master` of all three repos, and published as a GitHub release.** Everything below the next
+divider is the build-fix history; the live state is:
+- **Build:** green (build8, 1214 objects). **HW:** boots, runs in-game, cache loads, audio plays,
+  (-) menu opens, resolution/aspect change no longer crashes — all confirmed on real Tegra (192.168.1.11).
+- **Shipped:** dusklight + aurora + switch-nvk all fast-forwarded to `main`/`master`; the re-port
+  branch is merged in. GitHub release published on `HayatoG/dusklight` with the 24MB zip +
+  `INSTALACAO-pt-BR.md` / `INSTALLATION-en-US.md`.
+- **Features delivered this arc:** config-13 shader cache loads (cachePath fix) · audio (libnx audren) ·
+  in-game **(−)** menu · pipeline-compilation notification + achievement toasts · resolution/aspect-change
+  crash fix (WSI swapchain-recreate owner-transfer).
+- **One known WIP (not a blocker):** frame interpolation (30→60fps) — enabled but produces no extra
+  frames on Switch yet. See the 30fps note below.
+- **Standing rule:** ASK the user before any future commit/push.
+
 ## BUILD-FIX LOG (live — iterating build → fix → repeat, 2026-06-18)
 Builds run from `/d/Projects/dusklight` via `bash /d/Projects/dusklight/platforms/switch/build-docker.sh build`
 (absolute path — cwd may drift). Logs: `/d/dusklight-build/report_buildN.log`. Build dir persists
@@ -57,10 +73,10 @@ Build7 (link) GREEN. Build8 = cache-path fix (data.cpp `0a83eceed2`).
 ## POST-RE-PORT FEATURES (user asked 2026-06-18: audio, pipeline-notif, (-) overlay)
 User confirmed the RmlUi **FPS overlay DOES render in-game** on Switch → the RmlUi UI pipeline is live in-game (aurora renders g_context every frame via aurora.cpp:264 `rmlui::record_frame`).
 
-### 🔊 AUDIO — IMPLEMENTED (building; HW test pending)
+### 🔊 AUDIO — ✅ DONE + HW-VALIDATED ("Tem som!")
 Reference RE (`C:\Users\Guilherme\Downloads\dusklight-switch\analysis\out\05_audio_backend.c`) shows Encounter uses **SDL3's own libnx/audren** audio driver (strings `audrenInitialize/audrvCreate/audrenStartAudioRenderer failed`, `"MainAudioOut"`, format 0x8120=F32). We mirror just the SDL audio surface `DuskAudioSystem.cpp` uses, over audren. Chain: game → JAudio2 → DuskDsp (`DspRender` → float32 stereo @ 32kHz) → SDL_PutAudioStreamData → **our audren backend** → speakers.
 Files changed:
-- **NEW `platforms/switch/src/switch_audio.cpp`** — audren backend: `audrenInitialize`→`audrvCreate(…,2)`→mempool add/attach→`audrvDeviceSinkAdd("MainAudioOut",2)`→`audrenStartAudioRenderer`→`audrvVoiceInit(0,2,PcmFormat_Float,32000)`→mix factors→`audrvVoiceStart`. Dedicated pthread (256KB stack) pulls PCM the game pushed into a 64KB ring, fills 4×8KB wavebufs (armDCacheFlush before queue), `audrvVoiceAddWaveBuf`+`audrvUpdate`+`audrenWaitFrame`. F32 fed direct (no convert). Implements `SDL_Init/SDL_OpenAudioDeviceStream/SDL_PutAudioStreamData/SDL_Resume|PauseAudioStreamDevice`. **KEY: stream opens PAUSED** (DuskAudioSystem runs DspInit AFTER open, resumes at end of Initialize) — render before DspInit would touch uninit DSP. Init fail → returns non-null sentinel, runs silent (no crash).
+- **NEW `platforms/switch/src/switch_audio.cpp`** — audren backend: `audrenInitialize`→`audrvCreate(…,2)`→mempool add/attach→`audrvDeviceSinkAdd("MainAudioOut",2)`→`audrenStartAudioRenderer`→`audrvVoiceInit(0,2,PcmFormat_Int16,freq)`→mix factors→`audrvVoiceStart`. Dedicated pthread (256KB stack) pulls PCM the game pushed into a 64KB ring, fills 4×1024-frame wavebufs (armDCacheFlush before queue), `audrvVoiceAddWaveBuf`+`audrvUpdate`+`audrenWaitFrame`. **HW FIX:** audren rejects `PcmFormat_Float` (only `Int16` accepted) → the thread converts the F32 the game pushes into s16 (`out[s]=(s16)(v*32767.0f)`) into the pool slot. Implements `SDL_Init/SDL_OpenAudioDeviceStream/SDL_PutAudioStreamData/SDL_Resume|PauseAudioStreamDevice`. **KEY: stream opens PAUSED** (DuskAudioSystem runs DspInit AFTER open, resumes at end of Initialize) — render before DspInit would touch uninit DSP. Init fail → returns non-null sentinel, runs silent (no crash). **HW: confirmed audible ("Tem som!").**
 - **`extern/aurora/include/SDL3/SDL.h`** — added audio decls (SDL_AudioSpec{format,channels,freq}, SDL_AUDIO_F32=0x8120, SDL_AudioStream opaque, callback typedef, SDLCALL, the 5 fn prototypes — non-inline, defined in switch_audio.cpp).
 - **`include/dusk/audio.h`** — `DUSK_AUDIO_DISABLED` 1→0 on Switch; `DUSK_AUDIO_SKIP` → empty (audio wired).
 - **`CMakeLists.txt`** — re-include `src/dusk/audio/{DuskAudioSystem,DuskDsp,Adpcm}.cpp` + add `switch_audio.cpp` (keep JASCriticalSection/DspStub/switch_stubs).
@@ -68,17 +84,43 @@ Files changed:
 - Wiring: `libs/JSystem/src/JAudio2/JAUInitializer.cpp:66` calls `dusk::audio::Initialize()` in the JAudio2 init (runs now that audio is enabled). globals (MasterVolume/EnableReverb/EnableHrtf/ChannelAux) in DuskDsp.cpp.
 - **RISK (HW): the old reason audio was off** = `Z2AudioMgr::init` hit a null FX-line in `JASDsp::setFXLine`. Now `DuskAudioSystem::Initialize` runs `JASDsp::initBuffer()`/`initAll()` first — hopefully fixes it. If it still crashes on HW → trace setFXLine. Also watch audren errcodes + buffer underrun.
 
-### 🔔 PIPELINE NOTIFICATION — ✅ IMPLEMENTED (RmlUi port; build green, HW test pending)
+### 🔔 PIPELINE NOTIFICATION — ✅ DONE + HW-VALIDATED
 The pipeline-compilation progress only had an ImGui impl (ImGuiConsole.cpp, excluded on Switch). Ported to an RmlUi overlay element:
 - `src/dusk/ui/overlay.cpp` — added `<pipeline-compilation id="pipeline-compilation"/>` to kDocumentSource; `Overlay::update()` shows it while `getSettings().backend.showPipelineCompilation && aurora_get_stats()->queuedPipelines > 0`, label "Compiling shaders… {createdPipelines}/{created+queued}" (throttled 0.1s), mirroring the FPS element.
 - `src/dusk/ui/overlay.hpp` — `mPipelineCompilation` + `mPipelineLastUpdate` members.
 - `res/rml/overlay.rcss` — `pipeline-compilation` style (bottom-center card; `[open]` shows). Bundled via make-nro romfs.
 - Achievement/controller toasts already render via overlay.cpp create_toast; the unlock sound (`mDoAud_seStartMenu`) now works thanks to audio.
 
-### 🎛️ (-) OVERLAY IN-GAME — DIAGNOSED + INSTRUMENTED (needs 1 HW trace, then fix)
-Root cause narrowed: MINUS→`KI_F1`(input.cpp:207-211)→`NavCommand::Menu`(ui.cpp:333)→`Document::handle_nav_command`→`toggle()`(document.cpp:141-144). RmlUi keydowns only reach a document's listener if it's **focused** (document.cpp:45-56: passive Overlay forwards to top_document only when *it* gets the keydown). In-game the game holds input focus, so the menu keydown likely never reaches the MenuBar (works in launcher because a UI doc is focused there).
-- Added a DIAG log at `document.cpp:143` (`[ui-diag] NavCommand::Menu -> toggle`, `#ifdef __SWITCH__`). HW test: press MINUS in-game — if it logs, toggle fires (look elsewhere); if it logs in launcher but NOT in-game → keydown isn't routing (focus) → fix = give the Overlay/MenuBar a focused element in-game OR poll the menu button directly in the in-game loop and call toggle. NOT fixed speculatively (would risk the launcher's working nav).
-- Added `aurora::Module Log{"dusk::ui::document"}` to document.cpp for the diag.
+### 🎛️ (-) OVERLAY IN-GAME — ✅ DONE + HW-VALIDATED ("Apareceu!")
+Fixed via THREE log-driven diagnoses on HW (every step confirmed by the nxlink log, not guessed):
+1. **Assumption disproved:** the diag showed `focusNonNull=true` in-game → the keydown *was* reaching
+   a focused element, so my "game holds focus → keydown never routes" theory was wrong. Switched the
+   MINUS handler to an **unconditional direct toggle** instead of relying on RmlUi nav routing.
+2. **`top_document()==null` in-game:** the new direct-toggle path logged that `top_document()` returned
+   null in gameplay. Root cause: the close-loop in `m_Do/m_Do_main.cpp` (~line 823) was closing the
+   hidden MenuBar document on entry to gameplay → it left the active-doc stack. Fixed the loop to close
+   only **visible** docs (`if (doc && !doc->closed() && doc->visible())`) so the hidden MenuBar survives.
+3. **Final wiring (`src/dusk/ui/input.cpp` ~763):** for `KI_F1` in the non-deferred BUTTON_DOWN path,
+   `if (auto* doc = top_document()) { mDoAud_seStartMenu(doc->visible() ? kSoundMenuClose : kSoundMenuOpen); doc->toggle(); }` — plays the open/close SE (now audible thanks to audio) and toggles the menu.
+- Diag `Module Log` + `[ui-diag]` lines kept in `document.cpp`/`input.cpp` (cheap, `#ifdef __SWITCH__`).
+- HW: pressing **(−)** in-game opens/closes the menu with sound. **Confirmed ("Apareceu!").**
+
+### 📐 RESOLUTION / ASPECT-RATIO CHANGE — ✅ DONE + HW-VALIDATED ("Funcionou perfeito!")
+Changing Internal Resolution or aspect (4:3) — in the launcher OR in-game — crashed with Vulkan
+`0xf59` (nwindow buffer-registration collision). Root cause: a swapchain recreate creates the NEW
+swapchain (with `oldSwapchain`) **before** destroying the old one → both zero-copy chains briefly own
+the same `nwindow` buffers → registration collision. A crash-loop also occurred because the bad
+`video.lockAspectRatio`/resolution was saved to config and re-applied on every boot (unstuck once via
+FTP-resetting the config value).
+- **Fix (Option A — owner transfer) in `mesa-25/src/vulkan/wsi/wsi_common_switch.c`:** a file-static
+  `g_zc_owner` tracks which swapchain currently owns the nwindow's zero-copy buffers. On create, if a
+  *different* chain owns them, release them first (`nwindowReleaseBuffers`, clear its `zero_copy`).
+  On the new chain's zero-copy success, `g_zc_owner = chain`. On destroy, only release if this chain is
+  the owner. This serialises ownership across the brief two-chain window → no collision.
+- Rebuilt NVK (`ninja -C mb` → `package-nvk.sh` → libvulkan.a) → relinked dusklight. **HW: resolution
+  and aspect changes work both in the launcher and in-game. Confirmed ("Funcionou perfeito!").**
+- The fix is captured in the regenerated Mesa patch `D:\switch-nvk\patches\switch-nvk-mesa-25.0.7.patch`
+  (now complete, 24 files incl. the WSI). Plan doc: `platforms/switch/PLAN_ASPECT_WSI_RECREATE.md`.
 
 ## Why we're doing this
 A reference Switch build (Encounter's, `v1.4.1-32-dirty`) runs much better
@@ -90,14 +132,18 @@ makes the reference's `pipeline_cache.db` loadable (config 13). NOTE: the refere
 `dawn_cache.db` (compiled shader blobs) will NOT transfer (keyed by NVK/shader-gen) —
 proven by it growing +2.4MB on our runs.
 
-## Git state
-- **CHECKPOINT (safe, pushed) — bail here if needed:**
-  - dusklight `main` = `b931b0ca5a` (HayatoG/dusklight) — working v1.3.1 + cache/async/crash fixes.
-  - aurora `dusklight-switch-port` = `64cb652` (HayatoG/aurora-switch).
-- **RE-PORT branches (foundational merges committed, NOT pushed, NOT building yet):**
-  - aurora `switch-port/v13-report` = `3d749ff` (merged remote `enc` = encounter/aurora main).
-  - dusklight `switch-port/v1.4.1-report` = `10c47bd891` (merged remote `upstream` = TwilitRealm/dusklight tag v1.4.1; submodule → 3d749ff).
-- Resume: `git -C extern/aurora checkout switch-port/v13-report && git checkout switch-port/v1.4.1-report`.
+## Git state — ✅ SHIPPED TO MAIN/MASTER + RELEASE PUBLISHED
+The re-port is merged into the default branch of all three repos (own forks only — never upstream
+TwilitRealm/encounter/dantiicu). All three fast-forwarded; the `switch-port/*` branches are folded in.
+- **dusklight `main`** (HayatoG/dusklight) — v1.4.1 re-port + all this arc's fixes (cachePath, audio,
+  (-) menu, pipeline notif, WSI aspect/res). GitHub **release published** here (zip + pt-BR/en-US instructions).
+- **aurora `main`/`switch` branch** (HayatoG/aurora-switch) — encounter/aurora@13 base + Switch fixes
+  (pipeline_cache pthread/unix-none/MEMORY, PNG::PNG, gpu_prof/TracyPlatform, rmlui guards, pad_switch,
+  switch_aurora_stubs).
+- **switch-nvk `main`** (HayatoG/switch-nvk, PRIVATE) — Mesa 25.0.7 fork + the WSI owner-transfer fix.
+  Reproducibility: `patches/switch-nvk-mesa-25.0.7.patch` (24 files, complete) + `crossfiles/` (force-tracked)
+  + `REPRODUCE.md`. `mesa-25/` and `dan-re/` stay gitignored (never publish third-party/RE content).
+- **Standing rule (still in effect):** ASK the user before any commit/push.
 
 ## BUILD-FIX LOOP — the remaining work (iterative: build → fix → repeat)
 First build log: `/d/dusklight-build/report_build1.log`. Build cmd (from
@@ -143,9 +189,15 @@ Expected fixes (from API analysis; confirm against actual build errors):
 - Crash fix: async pipeline worker on 8MB pthread stack (was Tint stack overflow).
 - These need re-applying/verifying on the v13 base (see build-fix #2,#3).
 
-## Still open (post-re-port)
-- WS2 draws (game-side, maybe fixed in v1.4.1 — re-test). WS3 comptags (switch-nvk,
-  read-only repo — plan in PARITY_WORKSTREAMS.md). WS4 audio (reference uses SDL3+audren;
-  ours stubbed — v1.4.1's audio path may differ). Frame interpolation (compiled+enabled;
-  verify it runs on Switch — the 60-85fps lever). (-) menu in-game (input path is
-  launcher-only). Pipeline-compilation overlay (ImGui, off on Switch — needs RmlUi or v13's).
+## Still open (post-re-port) — almost everything DONE
+- ✅ **WS4 audio** — DONE (libnx audren, HW-validated).
+- ✅ **(-) menu in-game** — DONE (HW-validated).
+- ✅ **Pipeline-compilation overlay** — DONE (RmlUi port, HW-validated).
+- ✅ **Resolution/aspect change** — DONE (WSI owner-transfer, HW-validated).
+- ⏳ **Frame interpolation (30→60fps)** — the ONE remaining lever. Compiled + `enableFrameInterpolation`
+  enabled but produces NO extra frames on Switch yet. Loop `m_Do_main:337-360` gated by
+  `game_clock::advance_main_loop().is_interpolating`; top `VIWaitForRetrace()` (m_Do_main:329).
+  Hypothesis: main loop iterates ~30Hz (nothing to interpolate into) — VIWaitForRetrace cadence OR
+  ~33ms CPU/frame (present is only ~150µs). Needs HW instrumentation (log is_interpolating/sim_ticks_to_run
+  + per-section timing). NOT a release blocker — in-game runs at TP's native ~30fps.
+- WS3 comptags / FB compression (switch-nvk winsys) — long-term perf, plan in PARITY_WORKSTREAMS.md.
