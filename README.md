@@ -1,4 +1,9 @@
 <div align="center">
+  <h3>💬 Join our community on <a href="https://discord.gg/epxHVS5FWC">Discord</a>!</h3>
+  <p>A support community for this project — get help, share feedback, and connect with other users.</p>
+</div>
+
+<div align="center">
   <img src="res/logo.png" alt="Logo" width="640">
 
   <p align="center">
