@@ -1,10 +1,15 @@
 <div align="center">
+  <h3>💬 Join the <a href="https://discord.gg/epxHVS5FWC">Switch Support Discord</a>!</h3>
+  <p>Community support for running this project on Nintendo Switch — get help, share feedback, and connect with other users.</p>
+</div>
+
+<div align="center">
   <img src="res/logo.png" alt="Logo" width="640">
 
   <p align="center">
     <a href="https://twilitrealm.dev">Official Website</a>
     •
-    <a href="https://discord.gg/6NpMhefCK9">Discord</a>
+    <a href="https://discord.gg/6NpMhefCK9">Official Discord (PC)</a>
   </p>
 </div>
 
