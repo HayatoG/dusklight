@@ -34,14 +34,21 @@ namespace {
 // the normal docked defaults we restore to when the boost is turned off.
 constexpr u32 kCpuBoostHz = 1785000000u;  // vs 1020 MHz stock
 constexpr u32 kCpuStockHz = 1020000000u;
-constexpr u32 kGpuBoostHz = 768000000u;   // vs 384 MHz stock (docked)
+constexpr u32 kGpuBoostHz = 768000000u;   // vs 384 MHz stock (docked) — the docked ceiling
 constexpr u32 kGpuStockHz = 384000000u;
+// Boost+ (overclock): GPU 921.6 MHz + EMC 1600 MHz. These exceed the stock docked clocks and only
+// take effect if an overclock sysmodule (sys-clk-OC) has unlocked the clock tables; otherwise clkrst
+// clamps the GPU to 768 MHz (the readback log shows the rate actually applied).
+constexpr u32 kGpuBoostPlusHz = 921600000u;
+constexpr u32 kEmcBoostPlusHz = 1600000000u;  // docked memory (EMC) max
+constexpr u32 kEmcStockHz = 1331200000u;      // restore EMC here when leaving Boost+
 
 bool s_clkrstReady = false;
 bool s_clkrstTried = false;
-bool s_active = false;
+int  s_tier = 0;             // currently applied tier: 0 stock, 1 boost, 2 boost+
 bool s_initialized = false;
-bool s_everBoosted = false;  // have we ever pinned clocks this session?
+bool s_everBoosted = false;  // have we ever pinned CPU/GPU clocks this session?
+bool s_emcRaised = false;    // have we ever pinned EMC (Boost+)? — restore it only if so
 
 bool ensure_clkrst() {
     if (s_clkrstTried) {
@@ -83,15 +90,18 @@ void set_module(PcvModuleId mod, u32 hz, const char* name) {
 
 }  // namespace
 
-void set_cpu_boost(bool enabled) {
-    if (s_initialized && enabled == s_active) {
+void set_boost(bool boost, bool boostPlus) {
+    // boostPlus overrides boost: tier 2 = Boost+ (GPU 921 + EMC 1600), tier 1 = Boost (GPU 768),
+    // tier 0 = stock.
+    const int tier = boostPlus ? 2 : (boost ? 1 : 0);
+    if (s_initialized && tier == s_tier) {
         return;
     }
-    // Default boot state is OFF: if we've never pinned the clocks, leave the OS
-    // DVFS governor untouched (pinning stock rates here could cap the GPU's
+    // Default boot state is stock: if we've never pinned the clocks, leave the OS
+    // DVFS governor untouched (pinning stock rates here could cap the GPU/EMC
     // under-load boost and regress the baseline). Only act once a boost has run.
-    if (!enabled && !s_everBoosted) {
-        s_active = false;
+    if (tier == 0 && !s_everBoosted) {
+        s_tier = 0;
         s_initialized = true;
         return;
     }
@@ -99,19 +109,30 @@ void set_cpu_boost(bool enabled) {
         return;
     }
 
-    char b[80];
-    snprintf(b, sizeof b, "[perf] CPU boost %s (clkrst: CPU %u / GPU %u MHz)\n",
-             enabled ? "ON" : "OFF", (enabled ? kCpuBoostHz : kCpuStockHz) / 1000000u,
-             (enabled ? kGpuBoostHz : kGpuStockHz) / 1000000u);
+    const u32 cpu = (tier >= 1) ? kCpuBoostHz : kCpuStockHz;
+    const u32 gpu = (tier == 2) ? kGpuBoostPlusHz : (tier == 1 ? kGpuBoostHz : kGpuStockHz);
+
+    char b[128];
+    snprintf(b, sizeof b, "[perf] boost tier=%d -> CPU %u / GPU %u MHz%s\n", tier, cpu / 1000000u,
+             gpu / 1000000u, tier == 2 ? " / EMC 1600 MHz (Boost+ overclock)" : "");
     dusk_switch_log(b);
 
-    set_module(PcvModuleId_CpuBus, enabled ? kCpuBoostHz : kCpuStockHz, "CpuBus");
-    set_module(PcvModuleId_GPU, enabled ? kGpuBoostHz : kGpuStockHz, "GPU");
+    set_module(PcvModuleId_CpuBus, cpu, "CpuBus");
+    set_module(PcvModuleId_GPU, gpu, "GPU");
+    // EMC is pinned ONLY by Boost+ (helps the bandwidth-bound Maxwell GPU). Regular Boost / stock
+    // leave memory to the OS governor; restore EMC to stock only if a previous Boost+ raised it.
+    if (tier == 2) {
+        set_module(PcvModuleId_EMC, kEmcBoostPlusHz, "EMC");
+        s_emcRaised = true;
+    } else if (s_emcRaised) {
+        set_module(PcvModuleId_EMC, kEmcStockHz, "EMC");
+        s_emcRaised = false;
+    }
 
-    if (enabled) {
+    if (tier != 0) {
         s_everBoosted = true;
     }
-    s_active = enabled;
+    s_tier = tier;
     s_initialized = true;
 }
 

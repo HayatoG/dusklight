@@ -10,6 +10,7 @@
 #include <fmt/format.h>
 
 #include "dusk/config.hpp"
+#include "dusk/i18n.hpp"
 #include "dusk/settings.h"
 #include "dusk/texture_replacements.hpp"
 
@@ -235,12 +236,13 @@ Rml::String format_graphics_setting_value(GraphicsOption option, int value) {
             u32 width = 0;
             u32 height = 0;
             AuroraGetRenderSize(&width, &height);
-            return fmt::format("Auto ({}×{})", width, height);
+            return dusk::i18n::tr_fmt("graphics.resolution_auto", width, height);
         }
-        return fmt::format("{} ({}×{})", preset.label, preset.width, preset.height);
+        return dusk::i18n::tr_fmt("graphics.resolution_named", preset.label, preset.width,
+                                  preset.height);
     }
     case GraphicsOption::ShadowResolution:
-        return fmt::format("{}×", value);
+        return dusk::i18n::tr_fmt("graphics.shadow_multiplier", value);
     case GraphicsOption::Resampler:
         switch (static_cast<Resampler>(value)) {
         case Resampler::Bilinear:
@@ -252,9 +254,9 @@ Rml::String format_graphics_setting_value(GraphicsOption option, int value) {
     case GraphicsOption::BloomMode:
         switch (static_cast<BloomMode>(value)) {
         case BloomMode::Off:
-            return "Off";
+            return dusk::i18n::tr("graphics.off");
         case BloomMode::Classic:
-            return "Classic";
+            return dusk::i18n::tr("graphics.classic");
         case BloomMode::Dusk:
             return "Dusklight";
         }
@@ -262,17 +264,17 @@ Rml::String format_graphics_setting_value(GraphicsOption option, int value) {
     case GraphicsOption::DepthOfFieldMode:
         switch (static_cast<DepthOfFieldMode>(value)) {
         case DepthOfFieldMode::Off:
-            return "Off";
+            return dusk::i18n::tr("graphics.off");
         case DepthOfFieldMode::Classic:
-            return "Classic";
+            return dusk::i18n::tr("graphics.classic");
         case DepthOfFieldMode::Dusk:
             return "Dusklight";
         }
         break;
     case GraphicsOption::BloomMultiplier:
-        return fmt::format("{}%", value);
+        return dusk::i18n::tr_fmt("graphics.percent", value);
     case GraphicsOption::TextureReplacements:
-        return static_cast<bool>(value) ? "On" : "Off";
+        return static_cast<bool>(value) ? dusk::i18n::tr("graphics.on") : dusk::i18n::tr("graphics.off");
     }
     return "";
 }
@@ -304,11 +306,13 @@ GraphicsTuner::GraphicsTuner(GraphicsTunerProps props, bool prelaunch)
     }
 
     if (auto* footer = mDocument->GetElementById("footer")) {
-        auto& returnButton = add_component<Button>(footer, "\xE2\x86\x90 Return", "footer-button")
-                                 .on_pressed([this] { pop(); });
+        auto& returnButton =
+            add_component<Button>(footer, "\xE2\x86\x90 " + dusk::i18n::tr("graphics.return"),
+                                  "footer-button")
+                .on_pressed([this] { pop(); });
         returnButton.root()->SetClass("return", true);
         auto& resetButton =
-            add_component<Button>(footer, "Reset to default", "footer-button").on_pressed([this] {
+            add_component<Button>(footer, dusk::i18n::tr("graphics.reset_default"), "footer-button").on_pressed([this] {
                 mDoAud_seStartMenu(kSoundItemChange);
                 reset_default();
             });

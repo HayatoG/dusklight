@@ -2,6 +2,7 @@
 
 #include "Z2AudioLib/Z2SeMgr.h"
 #include "dusk/achievements.h"
+#include "dusk/i18n.hpp"
 #include "fmt/format.h"
 #include "m_Do/m_Do_audio.h"
 #include "nav_types.hpp"
@@ -33,7 +34,7 @@ Rml::String build_achievement_info_rml(const Achievement& a) {
         a.unlocked ? " unlocked" : "",
         a.name,
         a.unlocked ? " unlocked" : " locked",
-        a.unlocked ? "Unlocked" : "Locked",
+        a.unlocked ? i18n::tr("achievements.unlocked") : i18n::tr("achievements.locked"),
         a.description
     );
 
@@ -41,11 +42,10 @@ Rml::String build_achievement_info_rml(const Achievement& a) {
         float fraction = a.goal > 0 ? float(a.progress) / float(a.goal) : 1.0f;
         s += fmt::format(
             R"(<progress value="{:.3f}" class="{}"/>)"
-            R"(<span class="achievement-progress">{} / {}</span>)",
+            R"(<span class="achievement-progress">{}</span>)",
             fraction,
             a.unlocked ? "progress-done" : "progress-ongoing",
-            a.progress,
-            a.goal
+            i18n::tr_fmt("achievements.progress", a.progress, a.goal)
         );
     }
 
@@ -69,7 +69,7 @@ public:
                     resetConfirm();
                 } else {
                     mConfirming = true;
-                    mClearButton->set_text("Clear?");
+                    mClearButton->set_text(i18n::tr("achievements.confirm_clear"));
                 }
                 return true;
             }
@@ -131,7 +131,8 @@ AchievementsWindow::AchievementsWindow() {
             continue;
         }
 
-        add_tab(catInfo.label, [this, cat = catInfo.cat](Rml::Element* content) {
+        add_tab(i18n::tr_index("achievements.category", static_cast<int>(catInfo.cat)),
+                [this, cat = catInfo.cat](Rml::Element* content) {
             const auto achievements = AchievementSystem::get().getAchievements();
 
             int total = 0, unlocked = 0;
@@ -146,7 +147,7 @@ AchievementsWindow::AchievementsWindow() {
 
             auto& pane = add_child<Pane>(content, Pane::Type::Controlled);
 
-            pane.add_section(fmt::format("{} / {} unlocked", unlocked, total));
+            pane.add_section(i18n::tr_fmt("achievements.unlocked_count", unlocked, total));
 
             for (const auto& a : achievements) {
                 if (a.category != cat) {
@@ -155,9 +156,9 @@ AchievementsWindow::AchievementsWindow() {
                 pane.add_child<AchievementRow>(a);
             }
 
-            pane.add_section("Actions");
+            pane.add_section(i18n::tr("achievements.actions"));
 
-            auto& clearAllBtn = pane.add_button("Clear All Achievements");
+            auto& clearAllBtn = pane.add_button(i18n::tr("achievements.clear_all"));
             auto* clearAllPtr = &clearAllBtn;
             auto confirmingAll = std::make_shared<bool>(false);
 
@@ -167,23 +168,23 @@ AchievementsWindow::AchievementsWindow() {
                         mDoAud_seStartMenu(kSoundClick);
                         AchievementSystem::get().clearAll();
                         *confirmingAll = false;
-                        clearAllPtr->set_text("Clear All Achievements");
+                        clearAllPtr->set_text(i18n::tr("achievements.clear_all"));
                     } else {
                         *confirmingAll = true;
-                        clearAllPtr->set_text("Are you sure?");
+                        clearAllPtr->set_text(i18n::tr("achievements.confirm_clear_all"));
                     }
                     return true;
                 }
                 if (cmd == NavCommand::Cancel && *confirmingAll) {
                     *confirmingAll = false;
-                    clearAllPtr->set_text("Clear All Achievements");
+                    clearAllPtr->set_text(i18n::tr("achievements.clear_all"));
                     return true;
                 }
                 return false;
             });
             clearAllBtn.listen(Rml::EventId::Blur, [clearAllPtr, confirmingAll](Rml::Event&) {
                 *confirmingAll = false;
-                clearAllPtr->set_text("Clear All Achievements");
+                clearAllPtr->set_text(i18n::tr("achievements.clear_all"));
             });
 
             pane.finalize();
@@ -225,7 +226,7 @@ void AchievementsWindow::updateTotal() {
         }
     }
     const int pct = total > 0 ? (unlocked * 100 / total) : 0;
-    mTotalEl->SetInnerRML(fmt::format("{}%", pct));
+    mTotalEl->SetInnerRML(i18n::tr_fmt("achievements.total_percent", pct));
 }
 
 }  // namespace dusk::ui

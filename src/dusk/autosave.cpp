@@ -1,6 +1,5 @@
 #include "dusk/autosave.h"
 #include "dusk/ui/ui.hpp"
-#include "imgui/ImGuiConsole.hpp"
 
 bool shouldAutoSave = false;
 u8 mSaveBuffer[QUEST_LOG_SIZE * 3];

@@ -533,8 +533,8 @@ if (AURORA_PLATFORM_SWITCH)
     # Prelaunch,PresetWindow} symbols referenced by m_Do_main / achievements.
     list(FILTER DUSK_FILES EXCLUDE REGEX "src/dusk/file_select(\\.cpp|\\.hpp)")
     list(FILTER DUSK_FILES EXCLUDE REGEX "src/dusk/iso_validate")
-    list(FILTER DUSK_FILES EXCLUDE REGEX "src/dusk/autosave\\.cpp")
-    list(FILTER DUSK_FILES EXCLUDE REGEX "src/dusk/gyro\\.cpp")
+    # autosave.cpp and gyro.cpp ARE built on Switch now (real implementations, not the old stubs in
+    # switch_stubs.cpp). See HayatoG/dusklight#9 (autosave) and #3 (gyro).
     # crash_handler.cpp uses <dlfcn.h>/<unwind.h>/<link.h> POSIX symbols not in
     # newlib; switch_stubs.cpp provides install() as a no-op (libnx handles
     # crashes via __wrap_abort + dusk_terminate_handler + stderr→file).

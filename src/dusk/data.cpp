@@ -7,6 +7,7 @@
 
 #include <array>
 #include <chrono>
+#include <cstdio>
 #include <filesystem>
 #include <optional>
 #include <ranges>
@@ -979,6 +980,70 @@ bool is_data_path_restart_pending() {
     return normalized_path(ConfigPath) != normalized_path(configured_data_path());
 }
 
+#ifdef __SWITCH__
+// First-boot self-provision (HayatoG/dusklight#5, Option B): the NRO bundles a default config and the
+// pre-warmed shader caches under romfs:/seed/. Copy any that are missing into the data folder so a
+// clean install needs only the .nro — the user then drops their disc image into the folder (#6). Never
+// overwrites an existing file, so the user's own (warmer) cache and edited config are preserved.
+// Manual byte copy. NOTE: std::filesystem::copy_file returns ENOSYS ("Function not implemented") on
+// libnx (no copy_file_range / sendfile fast path, and the generic fallback isn't wired), so we stream
+// the bytes ourselves. Works across devoptab mounts (romfs -> sdmc).
+static bool copy_file_raw(const std::filesystem::path& src, const std::filesystem::path& dest) {
+    FILE* in = std::fopen(src.string().c_str(), "rb");
+    if (in == nullptr) {
+        return false;
+    }
+    FILE* out = std::fopen(dest.string().c_str(), "wb");
+    if (out == nullptr) {
+        std::fclose(in);
+        return false;
+    }
+    char buf[65536];
+    bool ok = true;
+    size_t n;
+    while ((n = std::fread(buf, 1, sizeof buf, in)) > 0) {
+        if (std::fwrite(buf, 1, n, out) != n) {
+            ok = false;
+            break;
+        }
+    }
+    if (std::ferror(in)) {
+        ok = false;
+    }
+    std::fclose(in);
+    if (std::fclose(out) != 0) {
+        ok = false;
+    }
+    return ok;
+}
+
+static void seed_data_from_romfs(const std::filesystem::path& dataDir) {
+    static constexpr const char* kSeedFiles[] = {"config.json", "dawn_cache.db", "pipeline_cache.db"};
+    for (const char* name : kSeedFiles) {
+        const auto dest = dataDir / name;
+        std::error_code ec;
+        const bool present = std::filesystem::exists(dest, ec);
+        // Re-seed when the file is missing OR empty (0 bytes) — an empty config.json/cache is as
+        // broken as a missing one. Never overwrite a file that already has content (the user's own).
+        if (present) {
+            const auto sz = std::filesystem::file_size(dest, ec);
+            if (!ec && sz > 0) {
+                continue;
+            }
+        }
+        const auto src = std::filesystem::path("romfs:/seed") / name;
+        if (!std::filesystem::exists(src, ec)) {
+            continue;  // not bundled in this build — the app still runs without a seed
+        }
+        if (copy_file_raw(src, dest)) {
+            Log.warn("Seeded '{}' from romfs into the data folder", name);
+        } else {
+            Log.warn("Failed to seed '{}' from romfs", name);
+        }
+    }
+}
+#endif
+
 Paths initialize_data() {
     const auto preferredPrefPath = get_pref_path();
     const auto prefPath =
@@ -998,6 +1063,9 @@ Paths initialize_data() {
     migrate_data(prefPath, dataPath, descriptor ? &descriptor->descriptor : nullptr);
     ensure_data_directory(dataPath);
     ensure_data_directory(prefPath);
+#ifdef __SWITCH__
+    seed_data_from_romfs(dataPath);
+#endif
 
     return Paths{
         .userPath = dataPath,

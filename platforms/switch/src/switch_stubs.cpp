@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <cstring>
 #include <unistd.h>  // fsync
+#include <sys/stat.h>  // mkdir (create the single data folder for early-boot logs)
 #include <netinet/in.h>  // struct in_addr (for __nxlink_host / nxlink stdio)
 #include <memory>
 #include <string>
@@ -41,7 +42,17 @@ extern "C" void userAppExit(void) {
     romfsExit();
 }
 
-// ── file-based logging to sdmc:/dusklight.log ─────────────────────────────
+// ── single-folder data root (HayatoG/dusklight#5) ─────────────────────────
+// Keep EVERYTHING the app reads/writes under one folder on the SD card. This MUST match the
+// prefPath returned by the SDL_GetPrefPath shim (extern/aurora/include/SDL3/SDL.h). The early-boot
+// logs below open before dusk::data resolves/creates the data dir, so create the folder here first.
+#define DUSK_SD_DATA_ROOT "sdmc:/TwilitRealm/Dusklight"
+static void dusk_ensure_data_dir(void) {
+    mkdir("sdmc:/TwilitRealm", 0777);
+    mkdir(DUSK_SD_DATA_ROOT, 0777);
+}
+
+// ── file-based logging to <data folder>/dusklight.log ─────────────────────
 // svcOutputDebugString gets buffered/truncated by Eden. File logging on the
 // SD card works identically in Eden and on real hardware, never drops, and
 // survives the process so we can read it after a crash.
@@ -67,7 +78,8 @@ extern "C" {
     void dusk_switch_log_init(void) {
         if (dusk_log_inited) return;
         dusk_log_inited = true;
-        dusk_log_file = fopen("sdmc:/dusklight.log", "w");
+        dusk_ensure_data_dir();
+        dusk_log_file = fopen(DUSK_SD_DATA_ROOT "/dusklight.log", "w");
         if (dusk_log_file) {
             fputs("[DUSKLIGHT-LOG] init\n", dusk_log_file);
             fflush(dusk_log_file);
@@ -126,16 +138,8 @@ extern "C" {
 // the MasterVolume/EnableReverb/EnableHrtf/ChannelAux globals). Output goes through libnx audren in
 // platforms/switch/src/switch_audio.cpp. No stubs here anymore.
 
-// ── gyro (gyro.cpp replacement) ───────────────────────────────────────────
-namespace dusk::gyro {
-void getAimDeltas(float& x, float& y) { x = 0.0f; y = 0.0f; }
-bool get_sensor_keep_alive() { return false; }
-void set_sensor_keep_alive(bool) {}
-void read(float) {}
-bool rollgoal_gyro_enabled() { return false; }
-void rollgoalTick(bool, short) {}
-void rollgoalTableOffset(short&, short&) {}
-} // namespace dusk::gyro
+// gyro: real implementation in src/dusk/gyro.cpp (no longer excluded — it reads the Switch six-axis
+// via aurora's pad_switch and feeds Link's aim). See HayatoG/dusklight#3.
 
 // ── iso validation (iso_validate.cpp replacement) ─────────────────────────
 // log_verification_state takes `dusk::DiscVerificationState` (enum class : u8
@@ -148,7 +152,65 @@ void rollgoalTableOffset(short&, short&) {}
 #include "dusk/iso_validate.hpp"
 
 namespace dusk::iso {
-ValidationError inspect(const char*, DiscInfo&) { return ValidationError::Success; }
+// Lightweight on-device disc check. The real nod-based iso_validate.cpp is excluded on Switch (it
+// pulls the nod library + SDL that aren't built here), so these used to return Success for ANY file —
+// which is why the data-folder auto-scan happily picked a 303-byte ".controller" as the "disc". Mirror
+// aurora's createImageReader magic detection (lib/dolphin/dvd/dvd_switch.cpp): reject too-small files,
+// accept known container formats by their offset-0 magic, or a raw GCM/ISO by the GameCube magic
+// 0xC2339F3D at offset 0x1C. See HayatoG/dusklight#6.
+static ValidationError lightweight_disc_check(const char* path, DiscInfo& info) {
+    if (path == nullptr || path[0] == '\0') {
+        return ValidationError::IOError;
+    }
+    FILE* f = std::fopen(path, "rb");
+    if (f == nullptr) {
+        return ValidationError::IOError;
+    }
+    if (std::fseek(f, 0, SEEK_END) != 0) {
+        std::fclose(f);
+        return ValidationError::IOError;
+    }
+    const long size = std::ftell(f);
+    // A real GameCube/Wii disc image (raw or compressed) is at least tens of MB; reject companions
+    // like config.json, *.controller, cache .db and .gci saves up front.
+    if (size < 16L * 1024 * 1024) {
+        std::fclose(f);
+        return ValidationError::InvalidImage;
+    }
+    unsigned char hdr[0x20] = {};
+    std::fseek(f, 0, SEEK_SET);
+    const size_t n = std::fread(hdr, 1, sizeof hdr, f);
+    std::fclose(f);
+    if (n < sizeof hdr) {
+        return ValidationError::InvalidImage;
+    }
+    const uint32_t magicLE = static_cast<uint32_t>(hdr[0]) | (static_cast<uint32_t>(hdr[1]) << 8) |
+                             (static_cast<uint32_t>(hdr[2]) << 16) |
+                             (static_cast<uint32_t>(hdr[3]) << 24);
+    switch (magicLE) {
+    case 0xB10BC001u:  // GCZ
+    case 0x4F534943u:  // CISO
+    case 0xA2380FAEu:  // TGC
+    case 0x53464257u:  // WBFS
+    case 0x01414957u:  // WIA
+    case 0x015A5652u:  // RVZ
+    case 0x53474745u:  // NFS
+        return ValidationError::Success;  // container format — aurora_dvd_open decodes it
+    default:
+        break;
+    }
+    // Raw GCM/ISO: the GameCube magic word 0xC2339F3D sits at offset 0x1C (big-endian on disc).
+    const uint32_t gcMagic = (static_cast<uint32_t>(hdr[0x1C]) << 24) |
+                             (static_cast<uint32_t>(hdr[0x1D]) << 16) |
+                             (static_cast<uint32_t>(hdr[0x1E]) << 8) | static_cast<uint32_t>(hdr[0x1F]);
+    if (gcMagic == 0xC2339F3Du) {
+        info.isPal = (hdr[3] == 'P');  // game-id byte 3: E=USA, P=PAL/EUR, J=JPN
+        return ValidationError::Success;
+    }
+    return ValidationError::WrongGame;
+}
+
+ValidationError inspect(const char* path, DiscInfo& info) { return lightweight_disc_check(path, info); }
 void log_verification_state(std::string_view, dusk::DiscVerificationState) {}
 } // namespace dusk::iso
 
@@ -210,10 +272,8 @@ bool any_document_visible() noexcept { return false; }
 
 } // namespace dusk
 
-// ── Autosave (autosave.cpp replacement) ───────────────────────────────────
-void toggleAutoSave(bool) {}
-void updateAutoSave() {}
-void triggerAutoSave() {}
+// autosave: real implementation in src/dusk/autosave.cpp (no longer excluded — uses the same proven
+// g_mDoMemCd_control save path as manual save). See HayatoG/dusklight#9.
 
 // ── POSIX shims missing from libnx newlib ─────────────────────────────────
 extern "C" int execv(const char*, char* const[]) {
@@ -264,15 +324,16 @@ extern "C" void __wrap_abort(void) {
 }
 
 __attribute__((constructor)) static void dusk_nvk_env(void) {
+    dusk_ensure_data_dir();  // keep the early-boot logs inside the single data folder (#5)
     setenv("NVK_I_WANT_A_BROKEN_VULKAN_DRIVER", "1", 1);
     setenv("MESA_SHADER_CACHE_DISABLE", "1", 1);
     // Route Mesa/NVK's own log (mesa_loge / unreachable / errorf) to a file so a driver-side
     // abort (the "User Break" crashes that don't symbolize the NRO) leaves a readable reason.
-    setenv("MESA_LOG_FILE", "sdmc:/mesa_nvk.log", 1);
+    setenv("MESA_LOG_FILE", DUSK_SD_DATA_ROOT "/mesa_nvk.log", 1);
     std::set_terminate(dusk_terminate_handler);
     // Capture stderr (assert() messages "file:line: cond", and anything printed there) to a file --
     // newlib's __assert_func writes the failing condition + location to stderr before aborting.
-    freopen("sdmc:/dusk_stderr.log", "w", stderr);
+    freopen(DUSK_SD_DATA_ROOT "/dusk_stderr.log", "w", stderr);
     // Stamp the build + the runtime address of a known function so a crash report's raw return
     // addresses can be turned into ELF offsets: offset = RA - (this_addr - nm(dusk_switch_log)).
     char b[160];
@@ -316,5 +377,9 @@ void ShowFolderSelect(FileCallback, void*, SDL_Window*, const char*) {}
 std::string display_name_for_path(std::string_view path) { return std::string(path); }
 }  // namespace dusk
 namespace dusk::iso {
-ValidationError validate(const char*, VerificationStatus&, DiscInfo&) { return ValidationError::Success; }
+// Same lightweight check as inspect() (full nod hash verification isn't available on Switch). Better
+// than the old always-Success, which let any file masquerade as a verified disc.
+ValidationError validate(const char* path, VerificationStatus&, DiscInfo& info) {
+    return lightweight_disc_check(path, info);
+}
 }  // namespace dusk::iso
