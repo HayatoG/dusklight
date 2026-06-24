@@ -4,6 +4,7 @@
 
 #include "Z2AudioLib/Z2SeMgr.h"
 #include "dusk/config.hpp"
+#include "dusk/i18n.hpp"
 #include "dusk/settings.h"
 #include "m_Do/m_Do_audio.h"
 
@@ -50,7 +51,8 @@ Rml::String touch_controls_editor_document_source() {
     <link type="text/rcss" href="res/rml/touch_controls_editor.rcss" />
 </head>
 <body id="root" class="touch-editor">
-)RML"} + Rml::String{fragment.data(), fragment.size()} + Rml::String{R"RML(
+)RML"} + Rml::String{fragment.data(), fragment.size()} + fmt::format(
+        R"RML(
     <selection-frame id="editor-selection-frame">
         <resize-handle id="editor-handle-left" class="edge horizontal left" />
         <resize-handle id="editor-handle-right" class="edge horizontal right" />
@@ -62,13 +64,16 @@ Rml::String touch_controls_editor_document_source() {
         <resize-handle id="editor-handle-bottom-right" class="corner bottom right" />
     </selection-frame>
     <editor-toolbar id="editor-toolbar">
-        <button id="editor-save" class="editor-command primary"><span>Save</span></button>
-        <button id="editor-reset" class="editor-command"><span>Reset</span></button>
-        <button id="editor-cancel" class="editor-command"><span>Cancel</span></button>
+        <button id="editor-save" class="editor-command primary"><span>{}</span></button>
+        <button id="editor-reset" class="editor-command"><span>{}</span></button>
+        <button id="editor-cancel" class="editor-command"><span>{}</span></button>
     </editor-toolbar>
 </body>
 </rml>
-)RML"};
+)RML",
+        i18n::tr("touch.save"),
+        i18n::tr("touch.reset"),
+        i18n::tr("touch.cancel"));
 }
 
 bool is_corner(TouchControlsEditor::EditHandle handle) noexcept {
@@ -593,12 +598,12 @@ void TouchControlsEditor::save_layout() {
 void TouchControlsEditor::request_reset() {
     auto dismiss = [](Modal& modal) { modal.pop(); };
     push(std::make_unique<Modal>(Modal::Props{
-        .title = "Reset Touch Layout?",
-        .bodyRml = "Reset controls to their default layout. This will not be saved until you press Save.",
+        .title = i18n::tr("touch.reset_modal.title"),
+        .bodyRml = i18n::tr("touch.reset_modal.body"),
         .actions =
             {
                 ModalAction{
-                    .label = "Reset",
+                    .label = i18n::tr("touch.reset"),
                     .onPressed =
                         [this, dismiss](Modal& modal) {
                             reset_working_layout();
@@ -607,7 +612,7 @@ void TouchControlsEditor::request_reset() {
                         },
                 },
                 ModalAction{
-                    .label = "Cancel",
+                    .label = i18n::tr("touch.cancel"),
                     .onPressed = dismiss,
                 },
             },

@@ -22,8 +22,20 @@ mkdir -p "$ROMFS_STAGE"
 if [ -d /dusklight/res ]; then
   ln -s /dusklight/res "$ROMFS_STAGE/res"
 fi
+# Bundle warm seed data (config + shader caches) at romfs:/seed/ so the app self-provisions the data
+# folder on first boot (HayatoG/dusklight#5, Option B). Source dir overridable via $SEED_DIR.
+SEED_DIR="${SEED_DIR:-/dusklight/build-switch/seed}"
+if [ -d "$SEED_DIR" ]; then
+  mkdir -p "$ROMFS_STAGE/seed"
+  for f in config.json dawn_cache.db pipeline_cache.db; do
+    if [ -f "$SEED_DIR/$f" ]; then
+      cp "$SEED_DIR/$f" "$ROMFS_STAGE/seed/$f"
+      echo "seed: bundled $f ($(du -h "$SEED_DIR/$f" | cut -f1))"
+    fi
+  done
+fi
 ROMFS_ARG=""
-if [ -d "$ROMFS_STAGE/res" ]; then
+if [ -d "$ROMFS_STAGE/res" ] || [ -d "$ROMFS_STAGE/seed" ]; then
   ROMFS_ARG="--romfsdir=$ROMFS_STAGE"
   echo "romfs staged at $ROMFS_STAGE:"
   ls -la "$ROMFS_STAGE/"

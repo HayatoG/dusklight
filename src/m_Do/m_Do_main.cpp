@@ -62,6 +62,7 @@ extern "C" void dusk_switch_log(const char*);
 #include "dusk/gyro.h"
 #include "dusk/imgui/ImGuiConsole.hpp"
 #include "dusk/imgui/ImGuiEngine.hpp"
+#include "dusk/i18n.hpp"
 #include "dusk/iso_validate.hpp"
 #include "dusk/logging.h"
 #include "dusk/main.h"
@@ -616,13 +617,15 @@ int game_main(int argc, char* argv[]) {
     log_build_info();
 
     dusk::config::LoadFromUserPreferences();
+    dusk::i18n::load(dusk::getSettings().backend.uiLanguage.getValue());
     if (dusk::getSettings().game.speedrunMode) {
         dusk::resetForSpeedrunMode();
     }
     ApplyCVarOverrides(parsed_arg_options["cvar"]);
     // Apply the persisted CPU-boost preference (Switch-only; no-op elsewhere) so the
     // user's saved choice is in effect from the first frame.
-    dusk::perf::set_cpu_boost(dusk::getSettings().video.cpuBoost.getValue());
+    dusk::perf::set_boost(dusk::getSettings().video.cpuBoost.getValue(),
+                          dusk::getSettings().video.cpuBoostPlus.getValue());
     dusk::crash_reporting::initialize();
     dusk::crash_handler::install();
     // TODO: How to handle this?
@@ -759,6 +762,53 @@ int game_main(int argc, char* argv[]) {
         forcePreLaunchUI = true;
         saveConfigBeforePrelaunch = true;
     }
+
+#ifdef __SWITCH__
+    // #6: accept any GameCube disc image placed in the data folder, regardless of file name or
+    // extension. If no valid disc is configured, scan the data dir and adopt the first file that
+    // validates as a supported TP disc. iso::inspect uses nod, so GCM/ISO/RVZ/CISO/GCZ/WBFS/WIA/etc.
+    // all work, and the game-id check rejects non-disc files (config.json, *.db, saves). See
+    // HayatoG/dusklight#6.
+    if (dusk::getSettings().backend.isoPath.getValue().empty()) {
+        std::error_code scanEc;
+        bool found = false;
+        if (std::filesystem::is_directory(dusk::ConfigPath, scanEc)) {
+            for (const auto& entry : std::filesystem::directory_iterator(dusk::ConfigPath, scanEc)) {
+                if (scanEc) {
+                    break;
+                }
+                if (!entry.is_regular_file()) {
+                    continue;
+                }
+                // Skip files too small to be a disc image (config.json, *.controller, cache .db,
+                // saves) so only real images are inspected — iso::inspect enforces the same floor.
+                std::error_code sizeEc;
+                const auto sz = entry.file_size(sizeEc);
+                if (sizeEc || sz < (16ull * 1024 * 1024)) {
+                    continue;
+                }
+                const auto candidateU8 = entry.path().u8string();
+                const std::string candidate(reinterpret_cast<const char*>(candidateU8.c_str()),
+                                            candidateU8.size());
+                dusk::iso::DiscInfo scanInfo{};
+                if (dusk::iso::inspect(candidate.c_str(), scanInfo) ==
+                    dusk::iso::ValidationError::Success) {
+                    DuskLog.warn("Auto-detected disc image in data folder: {}", candidate);
+                    dusk::getSettings().backend.isoPath.setValue(candidate);
+                    dusk::getSettings().backend.isoVerification.setValue(
+                        dusk::DiscVerificationState::Unknown);
+                    saveConfigBeforePrelaunch = true;
+                    found = true;
+                    break;
+                }
+            }
+        }
+        if (!found) {
+            DuskLog.warn("No compatible disc image found in the data folder — place your game "
+                         "(any name/format: .gcm/.iso/.rvz/...) in sdmc:/TwilitRealm/Dusklight/.");
+        }
+    }
+#endif
 
     std::string dvd_path;
     bool dvd_opened = false;

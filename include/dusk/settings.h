@@ -134,6 +134,9 @@ struct UserSettings {
         // Switch-only: request the Tegra X1 CPU boost clock (1785 MHz) to win back
         // headroom on the CPU-bound frame loop. No-op on other platforms.
         ConfigVar<bool> cpuBoost;
+        // Switch-only "Boost+" tier: GPU 921 MHz + memory (EMC) 1600 MHz on top of the 1785 MHz CPU.
+        // These GPU/EMC clocks are an overclock (need sys-clk-OC). No-op on other platforms.
+        ConfigVar<bool> cpuBoostPlus;
     } video;
 
     struct {
@@ -190,6 +193,7 @@ struct UserSettings {
         ConfigVar<float> bloomMultiplier;
         ConfigVar<DepthOfFieldMode> depthOfFieldMode;
         ConfigVar<bool> disableWaterRefraction;
+        ConfigVar<bool> disableShadows;
         ConfigVar<bool> enableTextureReplacements;
         ConfigVar<FrameInterpMode> enableFrameInterpolation;
         ConfigVar<int> internalResolutionScale;
@@ -283,6 +287,7 @@ struct UserSettings {
         ConfigVar<bool> checkForUpdates;
         ConfigVar<int> cardFileType;
         ConfigVar<bool> enableAdvancedSettings;
+        ConfigVar<int> uiLanguage;  // launcher/menu UI language: 0=English, 1=Portuguese, 2=Spanish
     } backend;
 
     // Arrays of size 4 for 4 ports

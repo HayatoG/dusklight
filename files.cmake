@@ -1429,6 +1429,8 @@ set(DUSK_FILES
         src/dusk/data.cpp
         src/dusk/data.hpp
         src/dusk/endian.cpp
+        src/dusk/i18n.cpp
+        src/dusk/i18n.hpp
         src/dusk/extras.c
         src/dusk/file_select.cpp
         src/dusk/file_select.hpp

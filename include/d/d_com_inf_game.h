@@ -4906,12 +4906,24 @@ inline void dComIfGd_drawListZxlu() {
 
 inline void dComIfGd_drawShadow(Mtx param_0) {
     ZoneScoped;
-    g_dComIfG_gameInfo.drawlist.drawShadow(param_0);
+#ifdef TARGET_PC
+    if (!dusk::getSettings().game.disableShadows) {
+#endif
+        g_dComIfG_gameInfo.drawlist.drawShadow(param_0);
+#ifdef TARGET_PC
+    }
+#endif
 }
 
 inline void dComIfGd_imageDrawShadow(Mtx param_0) {
     ZoneScoped;
-    g_dComIfG_gameInfo.drawlist.imageDrawShadow(param_0);
+#ifdef TARGET_PC
+    if (!dusk::getSettings().game.disableShadows) {
+#endif
+        g_dComIfG_gameInfo.drawlist.imageDrawShadow(param_0);
+#ifdef TARGET_PC
+    }
+#endif
 }
 
 inline void dComIfGd_set3DlineMat(mDoExt_3DlineMat_c* param_0) {

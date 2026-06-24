@@ -104,6 +104,12 @@ constexpr const KnownDisc* find_disc(std::string_view id) {
     return nullptr;
 }
 
+// A real GameCube/Wii disc image is at least tens of MB. Reject obviously-too-small files up front so
+// data-folder companions (config.json, *.controller profiles, cache .db, .gci saves) can never be
+// mistaken for a disc image — without this, a tiny file slipping past nod was auto-selected as the
+// "disc" by the Switch folder scan. See HayatoG/dusklight#6.
+constexpr s64 kMinDiscImageBytes = 16ll * 1024 * 1024;  // 16 MB
+
 struct NodHandleWrapper {
     NodHandle* handle;
 
@@ -191,6 +197,12 @@ ValidationError validate(const char* path, VerificationStatus& status, DiscInfo&
         return ValidationError::IOError;
     }
 
+    const auto streamSize = SDL_GetIOSize(sdlStream);
+    if (streamSize >= 0 && streamSize < kMinDiscImageBytes) {
+        SDL_CloseIO(sdlStream);
+        return ValidationError::InvalidImage;
+    }
+
     NodHandleWrapper disc;
     const NodDiscStream nod_stream{
         .user_data = sdlStream,
@@ -227,6 +239,12 @@ ValidationError inspect(const char* path, DiscInfo& info) {
     const auto sdlStream = SDL_IOFromFile(path, "rb");
     if (sdlStream == nullptr) {
         return ValidationError::IOError;
+    }
+
+    const auto streamSize = SDL_GetIOSize(sdlStream);
+    if (streamSize >= 0 && streamSize < kMinDiscImageBytes) {
+        SDL_CloseIO(sdlStream);
+        return ValidationError::InvalidImage;
     }
 
     NodHandleWrapper disc;

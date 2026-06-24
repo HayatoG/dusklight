@@ -4,6 +4,7 @@
 
 #include "button.hpp"
 #include "dusk/crash_reporting.h"
+#include "dusk/i18n.hpp"
 #include "ui.hpp"
 
 #include <dolphin/gx/GXAurora.h>
@@ -18,37 +19,28 @@ CrashReportWindow::CrashReportWindow() : WindowSmall("modal", "modal-dialog") {
 
     auto* title = append(header, "div");
     title->SetClass("modal-title", true);
-    title->SetInnerRML("Send Crash Reports");
+    title->SetInnerRML(dusk::i18n::tr("reporting.title"));
 
     auto* headIcon = append(header, "icon");
     headIcon->SetClass("question-mark", true);
 
     auto* intro = append(mDialog, "div");
     intro->SetClass("modal-body", true);
-    intro->SetInnerRML(
-        "Dusklight can automatically send crash reports to the developers. Crash reports contain the "
-        "following:"
-        "<br/>• Operating system version<br/>• CPU architecture<br/>• GPU model & driver version"
-        "<br/>• File paths (may include account username)<br/>• Stack trace<br/><br/>"
-        "This can be changed in the Settings menu at any time.");
+    intro->SetInnerRML(dusk::i18n::tr("reporting.body"));
 
     auto* grid = append(mDialog, "div");
     grid->SetClass("preset-grid", true);
 
     struct OptionInfo {
-        const char* name;
-        const char* desc;
+        const char* nameKey;
+        const char* descKey;
         void (*apply)();
     };
 
     static constexpr OptionInfo kOptions[] = {
-        {"Enable",
-            "Send crash reports to Dusklight developers. Reports will include the information described "
-            "above.",
+        {"reporting.enable", "reporting.enable_desc",
             [] { crash_reporting::set_consent(true); }},
-        {"Disable",
-            "Do not send crash reports. This may make it more difficult to resolve issues you "
-            "encounter.",
+        {"reporting.disable", "reporting.disable_desc",
             [] { crash_reporting::set_consent(false); }},
     };
 
@@ -56,7 +48,7 @@ CrashReportWindow::CrashReportWindow() : WindowSmall("modal", "modal-dialog") {
         auto* col = append(grid, "div");
         col->SetClass("preset-col", true);
 
-        auto btn = std::make_unique<Button>(col, Rml::String(option.name));
+        auto btn = std::make_unique<Button>(col, dusk::i18n::tr(option.nameKey));
         btn->on_nav_command([this, apply = option.apply](Rml::Event&, NavCommand cmd) {
             if (cmd == NavCommand::Confirm) {
                 apply();
@@ -69,7 +61,7 @@ CrashReportWindow::CrashReportWindow() : WindowSmall("modal", "modal-dialog") {
 
         auto* desc = append(col, "div");
         desc->SetClass("preset-desc", true);
-        desc->SetInnerRML(option.desc);
+        desc->SetInnerRML(dusk::i18n::tr(option.descKey));
     }
 }
 

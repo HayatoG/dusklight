@@ -2,6 +2,7 @@
 
 #include "button.hpp"
 #include "dusk/config.hpp"
+#include "dusk/i18n.hpp"
 #include "dusk/settings.h"
 #include "ui.hpp"
 
@@ -82,41 +83,34 @@ PresetWindow::PresetWindow() : WindowSmall("modal", "modal-dialog") {
 
     auto* title = append(header, "div");
     title->SetClass("modal-title", true);
-    title->SetInnerRML("Welcome to Dusklight");
+    title->SetInnerRML(dusk::i18n::tr("preset.title"));
 
     auto* headIcon = append(header, "icon");
     headIcon->SetClass("celebration", true);
 
     auto* intro = append(mDialog, "div");
     intro->SetClass("modal-body", true);
-    intro->SetInnerRML(
-        "Choose a preset to get started. You can change any setting later from the Settings menu.");
+    intro->SetInnerRML(dusk::i18n::tr("preset.body"));
 
     auto* grid = append(mDialog, "div");
     grid->SetClass("preset-grid", true);
 
     struct PresetInfo {
-        const char* name;
-        const char* desc;
+        const char* nameKey;
+        const char* descKey;
         void (*apply)();
     };
 
     static constexpr PresetInfo kPresets[] = {
-        {"Classic",
-         "Enhancements disabled to match the GameCube version. "
-         "Good for speedrunning or simple nostalgia!",
-         applyPresetClassic},
-        {"Dusklight",
-         "Graphics & quality of life tweaks, including some from the Wii U version. "
-         "Our recommended way to play!",
-         applyPresetDusk},
+        {"preset.classic_name", "preset.classic_desc", applyPresetClassic},
+        {"preset.dusklight_name", "preset.dusklight_desc", applyPresetDusk},
     };
 
     for (const auto& preset : kPresets) {
         auto* col = append(grid, "div");
         col->SetClass("preset-col", true);
 
-        auto btn = std::make_unique<Button>(col, Rml::String(preset.name));
+        auto btn = std::make_unique<Button>(col, dusk::i18n::tr(preset.nameKey));
         btn->on_nav_command([this, apply = preset.apply](Rml::Event&, NavCommand cmd) {
             if (cmd == NavCommand::Confirm) {
                 apply();
@@ -131,7 +125,7 @@ PresetWindow::PresetWindow() : WindowSmall("modal", "modal-dialog") {
 
         auto* desc = append(col, "div");
         desc->SetClass("preset-desc", true);
-        desc->SetInnerRML(preset.desc);
+        desc->SetInnerRML(dusk::i18n::tr(preset.descKey));
     }
 }
 

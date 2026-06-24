@@ -1,0 +1,62 @@
+========================================================================
+ Dusklight - Nintendo Switch build
+ Open-source Twilight Princess reimplementation, GameCube -> Switch port
+========================================================================
+
+WHAT THIS IS
+------------
+A homebrew NRO that runs the Dusklight engine (TP reimplementation) on a
+modded Switch via our own NVK (Vulkan) graphics stack. The NRO is
+self-provisioning: it bundles a default config and a PRE-WARMED shader
+cache, and writes them into its data folder on first boot, so installation
+is basically just this one file (no/little texture & 3D-model pop-in).
+
+REQUIREMENTS
+------------
+1. A Switch on CFW (Atmosphere) with a homebrew launcher (hbmenu) or Sphaira.
+2. Your OWN legally-dumped Twilight Princess GameCube disc image (NOT
+   included). US release (GZ2E01), ~1.46 GB. ANY format/name works:
+   .gcm / .iso / .rvz / .ciso / .gcz / .wbfs - no need to rename it.
+
+INSTALL - basically just the .nro
+---------------------------------
+1. Copy dusklight.nro to  sdmc:/switch/
+2. Launch it once from hbmenu. It creates sdmc:/TwilitRealm/Dusklight/ and
+   writes the pre-warmed shader cache there automatically.
+3. Put your TP dump (any name/format) into sdmc:/TwilitRealm/Dusklight/
+4. Launch again - Dusklight auto-detects the disc and runs.
+
+No manual folder layout, no data_location.json, no game/ folder. Everything
+the app reads/writes lives under sdmc:/TwilitRealm/Dusklight/ (the only
+exceptions are this .nro in sdmc:/switch/ and CFW crash reports in
+sdmc:/atmosphere/).
+
+WHAT WORKS
+----------
+- Audio (JAudio2/DSP -> libnx audren).
+- Gyro on by default (bow/slingshot/clawshot aiming + look mode); tune or
+  disable in Settings -> Gyro.
+- In-game menu: press MINUS (-) during gameplay.
+- Automatic disc detection in the data folder (any name/format).
+- Pipeline-compilation notification + achievement toasts.
+- Changing Internal Resolution / aspect ratio (4:3) no longer crashes.
+- Pre-warmed shader cache -> little/no first-run pop-in.
+
+NOTES
+-----
+- Launcher/menus run at 60fps. In-game is ~30fps (TP's native GameCube rate).
+  Frame interpolation is present but not yet producing extra frames (WIP).
+- Per-file self-heal: on boot the NRO restores ANY missing seed file from its
+  bundled copy - config.json, dawn_cache.db or pipeline_cache.db - one by one
+  (the folder need not be empty). Files you already have are never overwritten.
+- The cache is read-write: missing shaders compile once and persist. Deleting
+  the .db files just recompiles on demand (and the seed is restored next boot).
+- Saves use the GameCube memory-card format (.gci) under .../USA/. An older
+  save from sdmc:/aurora/ is auto-imported on first boot.
+
+BUILD PROVENANCE
+----------------
+- dusklight: @DUSK_BRANCH@ @ @DUSK_REV@   (github.com/HayatoG/dusklight)
+- aurora:    @AURORA_BRANCH@ @ @AURORA_REV@   (github.com/HayatoG/aurora-switch)
+- NVK/WSI:   switch-nvk (our Mesa NVK + VK_NN_vi_surface WSI)
+========================================================================

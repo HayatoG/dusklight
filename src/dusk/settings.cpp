@@ -15,6 +15,7 @@ UserSettings g_userSettings = {
         .lastWindowWidth {"video.lastWindowWidth", 0},
         .lastWindowHeight {"video.lastWindowHeight", 0},
         .cpuBoost {"video.switchCpuBoost", false},
+        .cpuBoostPlus {"video.switchBoostPlus", false},
     },
 
     .audio = {
@@ -49,7 +50,11 @@ UserSettings g_userSettings = {
         .instantSaves {"game.instantSaves", false},
         .instantText {"game.instantText", false},
         .sunsSong {"game.sunsSong", false},
+#ifdef __SWITCH__
+        .autoSave {"game.autoSave", true},
+#else
         .autoSave {"game.autoSave", false},
+#endif
         .enhancedMapMenus {"game.enhancedMapMenus", false},
 
         // Preferences
@@ -68,6 +73,7 @@ UserSettings g_userSettings = {
         .bloomMultiplier {"game.bloomMultiplier", 1.0f},
         .depthOfFieldMode{"game.depthOfFieldMode", DepthOfFieldMode::Dusk},
         .disableWaterRefraction {"game.disableWaterRefraction", false},
+        .disableShadows {"game.disableShadows", false},
         .enableTextureReplacements {"game.enableTextureReplacements", true},
         .enableFrameInterpolation {"game.enableFrameInterpolation", FrameInterpMode::Off},
         .internalResolutionScale {"game.internalResolutionScale", 0},
@@ -81,8 +87,16 @@ UserSettings g_userSettings = {
         .midnasLamentNonStop {"game.midnasLamentNonStop", false},
 
         // Input
+#ifdef __SWITCH__
+        // The Switch has a built-in gyro; default-on so it's discoverable. Gyro aim only
+        // engages in look/aim modes (look, hawk, bow), not the free camera, so it won't
+        // cause drift during normal play. See HayatoG/dusklight#3.
+        .enableGyroAim {"game.enableGyroAim", true},
+        .enableGyroRollgoal {"game.enableGyroRollgoal", true},
+#else
         .enableGyroAim {"game.enableGyroAim", false},
         .enableGyroRollgoal {"game.enableGyroRollgoal", false},
+#endif
         .gyroSensitivityX {"game.gyroSensitivityX", 1.0f},
         .gyroSensitivityY {"game.gyroSensitivityY", 1.0f},
         .gyroSensitivityRollgoal {"game.gyroSensitivityRollgoal", 1.0f},
@@ -166,6 +180,7 @@ UserSettings g_userSettings = {
         .checkForUpdates {"backend.checkForUpdates", true},
         .cardFileType {"backend.cardFileType", static_cast<int>(CARD_GCIFOLDER)},
         .enableAdvancedSettings {"backend.enableAdvancedSettings", false},
+        .uiLanguage {"backend.uiLanguage", 0},
     },
 
     // Not sure if there's a better way to declare this
@@ -225,6 +240,7 @@ void registerSettings() {
     Register(g_userSettings.video.lastWindowWidth);
     Register(g_userSettings.video.lastWindowHeight);
     Register(g_userSettings.video.cpuBoost);
+    Register(g_userSettings.video.cpuBoostPlus);
 
     // Audio
     Register(g_userSettings.audio.masterVolume);
@@ -275,6 +291,7 @@ void registerSettings() {
     Register(g_userSettings.game.bloomMultiplier);
     Register(g_userSettings.game.depthOfFieldMode);
     Register(g_userSettings.game.disableWaterRefraction);
+    Register(g_userSettings.game.disableShadows);
     Register(g_userSettings.game.enableTextureReplacements);
     Register(g_userSettings.game.internalResolutionScale);
     Register(g_userSettings.game.resampler);
@@ -344,6 +361,7 @@ void registerSettings() {
     Register(g_userSettings.game.swapDirectSelect);
 
     Register(g_userSettings.backend.isoPath);
+    Register(g_userSettings.backend.uiLanguage);
     Register(g_userSettings.backend.isoVerification);
     Register(g_userSettings.backend.graphicsBackend);
     Register(g_userSettings.backend.skipPreLaunchUI);

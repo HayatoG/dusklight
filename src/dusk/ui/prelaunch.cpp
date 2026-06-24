@@ -3,6 +3,7 @@
 #include "dusk/config.hpp"
 #include "dusk/data.hpp"
 #include "dusk/file_select.hpp"
+#include "dusk/i18n.hpp"
 #include "dusk/iso_validate.hpp"
 #include "dusk/main.h"
 #include "dusk/settings.h"
@@ -57,7 +58,7 @@ const Rml::String kDocumentSource = R"RML(
             <span id="disc-version" class="detail" />
         </disc-info>
         <version-info class="intro-item delay-5">
-            <div class="version">Version <span id="version-text"></span></div>
+            <div class="version"><span id="version-label"></span> <span id="version-text"></span></div>
             <div id="update-status" class="update">
                 <span id="update-message"></span>
                 <button id="update-download">
@@ -71,10 +72,8 @@ const Rml::String kDocumentSource = R"RML(
 </rml>
 )RML";
 
-constexpr std::array<SDL_DialogFileFilter, 2> kDiscFileFilters{{
-    {"Game Disc Images", "iso;gcm;ciso;gcz;nfs;rvz;wbfs;wia;tgc"},
-    {"All Files", "*"},
-}};
+constexpr const char* kDiscFilterDiscPattern = "iso;gcm;ciso;gcz;nfs;rvz;wbfs;wia;tgc";
+constexpr const char* kDiscFilterAllPattern = "*";
 
 struct DiscVerificationResult {
     std::string path;
@@ -282,23 +281,21 @@ void open_update_release() {
 std::string get_error_msg(iso::ValidationError error) {
     switch (error) {
     default:
-        return "The selected disc image could not be validated.";
+        return dusk::i18n::tr("prelaunch.error.unknown");
     case iso::ValidationError::IOError:
-        return "Unable to read the selected file.";
+        return dusk::i18n::tr("prelaunch.error.io");
     case iso::ValidationError::InvalidImage:
-        return "The selected file is not a valid disc image.";
+        return dusk::i18n::tr("prelaunch.error.invalid_image");
     case iso::ValidationError::WrongGame:
-        return "The selected game is not supported by Dusklight.";
+        return dusk::i18n::tr("prelaunch.error.wrong_game");
     case iso::ValidationError::WrongVersion:
-        return "Dusklight currently supports GameCube USA and PAL disc images only.";
+        return dusk::i18n::tr("prelaunch.error.wrong_version");
     case iso::ValidationError::Canceled:
-        return "Disc verification was canceled. Dusklight cannot guarantee the selected disc "
-               "image is compatible.";
+        return dusk::i18n::tr("prelaunch.error.canceled");
     case iso::ValidationError::HashMismatch:
-        return "The selected disc image did not pass hash verification. It may be corrupt or "
-               "modified.";
+        return dusk::i18n::tr("prelaunch.error.hash_mismatch");
     case iso::ValidationError::Success:
-        return "The selected disc image is valid.";
+        return dusk::i18n::tr("prelaunch.error.success");
     }
 }
 
@@ -366,7 +363,7 @@ public:
 
         auto* title = append(header, "div");
         title->SetClass("modal-title", true);
-        title->SetInnerRML("Verifying disc image");
+        title->SetInnerRML(escape(dusk::i18n::tr("prelaunch.verify.title")));
 
         auto* icon = append(header, "icon");
         icon->SetClass("verifying", true);
@@ -390,7 +387,7 @@ public:
 
         auto* actions = append(mDialog, "div");
         actions->SetClass("modal-actions", true);
-        mCancelButton = std::make_unique<Button>(actions, "Cancel");
+        mCancelButton = std::make_unique<Button>(actions, dusk::i18n::tr("common.cancel"));
         mCancelButton->root()->SetClass("modal-btn", true);
         mCancelButton->on_pressed([this] { request_cancel(); });
 
@@ -439,7 +436,7 @@ private:
         mCancelRequested = true;
         sDiscVerificationTask->status.shouldCancel.store(true, std::memory_order_relaxed);
         if (mCancelButton != nullptr) {
-            mCancelButton->set_text("Cancelling...");
+            mCancelButton->set_text(dusk::i18n::tr("prelaunch.verify.cancelling"));
             mCancelButton->set_disabled(true);
         }
     }
@@ -471,7 +468,7 @@ private:
                 mProgress->SetAttribute("value", 0.f);
             }
             if (mDetail != nullptr) {
-                mDetail->SetInnerRML("Opening disc image...");
+                mDetail->SetInnerRML(escape(dusk::i18n::tr("prelaunch.verify.opening")));
             }
             return;
         }
@@ -482,8 +479,8 @@ private:
             mProgress->SetAttribute("value", fraction);
         }
         if (mDetail != nullptr) {
-            mDetail->SetInnerRML(escape(fmt::format("{} / {} ({:.0f}%)", format_bytes(bytesRead),
-                format_bytes(bytesTotal), fraction * 100.0f)));
+            mDetail->SetInnerRML(escape(dusk::i18n::tr_fmt("prelaunch.verify.progress",
+                format_bytes(bytesRead), format_bytes(bytesTotal), fraction * 100.0f)));
         }
     }
 
@@ -578,7 +575,7 @@ void try_push_verification_modal(Document& host) {
 
     if (!state.pendingDiscPath.empty()) {
         const Rml::String bodyRml =
-            state.errorString + "<br/><br/>You may proceed at your own risk.";
+            state.errorString + "<br/><br/>" + dusk::i18n::tr("prelaunch.verify.proceed_at_risk");
         auto acceptHashMismatch = [](Modal& modal) {
             auto& st = prelaunch_state();
             std::string path = std::move(st.pendingDiscPath);
@@ -593,16 +590,16 @@ void try_push_verification_modal(Document& host) {
             modal.pop();
         };
         host.push(std::make_unique<Modal>(Modal::Props{
-            .title = "Disc verification warning",
+            .title = dusk::i18n::tr("prelaunch.verify.warning_title"),
             .bodyRml = bodyRml,
             .actions =
                 {
                     ModalAction{
-                        .label = "Cancel",
+                        .label = dusk::i18n::tr("common.cancel"),
                         .onPressed = dismiss,
                     },
                     ModalAction{
-                        .label = "Continue anyway",
+                        .label = dusk::i18n::tr("prelaunch.verify.continue_anyway"),
                         .onPressed = acceptHashMismatch,
                     },
                 },
@@ -614,12 +611,12 @@ void try_push_verification_modal(Document& host) {
     }
 
     host.push(std::make_unique<Modal>(Modal::Props{
-        .title = "Disc verification error",
+        .title = dusk::i18n::tr("prelaunch.verify.error_title"),
         .bodyRml = state.errorString,
         .actions =
             {
                 ModalAction{
-                    .label = "OK",
+                    .label = dusk::i18n::tr("common.ok"),
                     .onPressed = dismiss,
                 },
             },
@@ -648,8 +645,14 @@ void ensure_initialized() noexcept {
 
 void open_iso_picker() noexcept {
     ensure_initialized();
+    // tr() returns references stable for the table lifetime, so these c_str() pointers
+    // remain valid for the duration of the (synchronous-dispatch) file dialog call.
+    const std::array<SDL_DialogFileFilter, 2> discFileFilters{{
+        {dusk::i18n::tr("prelaunch.filter.disc").c_str(), kDiscFilterDiscPattern},
+        {dusk::i18n::tr("prelaunch.filter.all").c_str(), kDiscFilterAllPattern},
+    }};
     ShowFileSelect(&file_dialog_callback, nullptr, aurora::window::get_sdl_window(),
-        kDiscFileFilters.data(), kDiscFileFilters.size(), nullptr, false);
+        discFileFilters.data(), discFileFilters.size(), nullptr, false);
 }
 
 bool is_restart_pending() noexcept {
@@ -692,7 +695,8 @@ Prelaunch::Prelaunch() : Document(kDocumentSource), mRoot(mDocument->GetElementB
         auto& state = prelaunch_state();
         const bool activeDiscLoaded = !state.activeDiscPath.empty();
         mMenuButtons.push_back(
-            std::make_unique<Button>(menuList, activeDiscLoaded ? "Play" : "Select Disc Image"));
+            std::make_unique<Button>(menuList, activeDiscLoaded ? dusk::i18n::tr("prelaunch.play")
+                                                                : dusk::i18n::tr("prelaunch.select_disc")));
         mMenuButtons.back()->on_pressed([this] {
             if (prelaunch_state().activeDiscPath.empty()) {
                 open_iso_picker();
@@ -719,20 +723,23 @@ Prelaunch::Prelaunch() : Document(kDocumentSource), mRoot(mDocument->GetElementB
         });
         apply_intro_animation(mMenuButtons.back()->root(), "delay-1");
 
-        mMenuButtons.push_back(std::make_unique<Button>(menuList, "Settings"));
+        mMenuButtons.push_back(std::make_unique<Button>(menuList, dusk::i18n::tr("common.settings")));
         mMenuButtons.back()->on_pressed([this] {
             mRestartSuppressed = false;
             push(std::make_unique<SettingsWindow>(true));
         });
         apply_intro_animation(mMenuButtons.back()->root(), "delay-2");
 
-        mMenuButtons.push_back(std::make_unique<Button>(menuList, "Quit"));
+        mMenuButtons.push_back(std::make_unique<Button>(menuList, dusk::i18n::tr("common.quit")));
         mMenuButtons.back()->on_pressed([] { IsRunning = false; });
         apply_intro_animation(mMenuButtons.back()->root(), "delay-3");
     }
 
     mDiscStatus = mDocument->GetElementById("disc-status");
     mDiscDetail = mDocument->GetElementById("disc-version");
+    if (auto* versionLabel = mDocument->GetElementById("version-label")) {
+        versionLabel->SetInnerRML(escape(dusk::i18n::tr("prelaunch.version")));
+    }
     mVersion = mDocument->GetElementById("version-text");
     mUpdateStatus = mDocument->GetElementById("update-status");
     mUpdateMessage = mDocument->GetElementById("update-message");
@@ -780,27 +787,25 @@ void Prelaunch::show() {
         std::vector<ModalAction> actions;
         if constexpr (dusk::SupportsProcessRestart) {
             actions.push_back(ModalAction{
-                .label = "Restart later",
+                .label = dusk::i18n::tr("prelaunch.restart.later"),
                 .onPressed = dismiss,
             });
             actions.push_back(ModalAction{
-                .label = "Restart now",
+                .label = dusk::i18n::tr("prelaunch.restart.now"),
                 .onPressed = [](Modal&) { dusk::RequestRestart(); },
             });
         } else {
             actions.push_back(ModalAction{
-                .label = "OK",
+                .label = dusk::i18n::tr("common.ok"),
                 .onPressed = dismiss,
             });
         }
         push(std::make_unique<Modal>(Modal::Props{
-            .title = "Apply Options",
+            .title = dusk::i18n::tr("prelaunch.restart.title"),
             .bodyRml =
                 dusk::SupportsProcessRestart ?
-                    "A restart is required to apply selected options.<br/><br/>Restart now to "
-                    "apply them immediately?" :
-                    "A restart is required to apply selected options.<br/><br/>Close and reopen "
-                    "Dusklight to apply them.",
+                    dusk::i18n::tr("prelaunch.restart.body_supported") :
+                    dusk::i18n::tr("prelaunch.restart.body_unsupported"),
             .actions = std::move(actions),
             .onDismiss = dismiss,
         }));
@@ -853,7 +858,8 @@ void Prelaunch::update() {
     }
 
     if (!mMenuButtons.empty()) {
-        mMenuButtons[0]->set_text(activeDiscLoaded ? "Play" : "Select Disc Image");
+        mMenuButtons[0]->set_text(activeDiscLoaded ? dusk::i18n::tr("prelaunch.play")
+                                                   : dusk::i18n::tr("prelaunch.select_disc"));
     }
 
     const auto discStatusLabel = mDiscStatus->GetElementById("disc-status-label");
@@ -861,22 +867,22 @@ void Prelaunch::update() {
     if (mDiscStatus != nullptr && discStatusLabel != nullptr) {
         if (!activeDiscLoaded) {
             mDiscStatus->RemoveAttribute("status");
-            discStatusLabel->SetInnerRML("No disc image found.");
+            discStatusLabel->SetInnerRML(dusk::i18n::tr("prelaunch.disc.none"));
         } else if (discRestartPending) {
             mDiscStatus->SetAttribute("status", "pending");
-            discStatusLabel->SetInnerRML("Pending restart.");
+            discStatusLabel->SetInnerRML(dusk::i18n::tr("prelaunch.disc.pending"));
         } else if (state.configuredDiscValidation == iso::ValidationError::Success) {
             mDiscStatus->SetAttribute("status", "good");
-            discStatusLabel->SetInnerRML("Disc ready.");
+            discStatusLabel->SetInnerRML(dusk::i18n::tr("prelaunch.disc.ready"));
         } else if (state.configuredDiscValidation == iso::ValidationError::HashMismatch) {
             mDiscStatus->SetAttribute("status", "mismatch");
-            discStatusLabel->SetInnerRML("Disc hash mismatch.");
+            discStatusLabel->SetInnerRML(dusk::i18n::tr("prelaunch.disc.mismatch"));
         } else if (canLaunchConfiguredDisc) {
             mDiscStatus->SetAttribute("status", "unknown");
-            discStatusLabel->SetInnerRML("Disc not verified.");
+            discStatusLabel->SetInnerRML(dusk::i18n::tr("prelaunch.disc.unverified"));
         } else {
             mDiscStatus->SetAttribute("status", "bad");
-            discStatusLabel->SetInnerRML("Disc unavailable.");
+            discStatusLabel->SetInnerRML(dusk::i18n::tr("prelaunch.disc.unavailable"));
         }
     }
     if (mDiscDetail != nullptr) {
@@ -906,7 +912,7 @@ void Prelaunch::update() {
 
         if (sUpdateCheckTask != nullptr) {
             mUpdateStatus->SetAttribute("state", "checking");
-            mUpdateMessage->SetInnerRML("Checking for updates...");
+            mUpdateMessage->SetInnerRML(escape(dusk::i18n::tr("prelaunch.update.checking")));
         } else if (!sUpdateCheckResult.has_value() ||
                    sUpdateCheckResult->status == update_check::Status::UpToDate)
         {
@@ -914,14 +920,14 @@ void Prelaunch::update() {
             mUpdateMessage->SetInnerRML("");
         } else if (sUpdateCheckResult->status == update_check::Status::UpdateAvailable) {
             mUpdateStatus->SetAttribute("state", "available");
-            mUpdateMessage->SetInnerRML("Update available!");
+            mUpdateMessage->SetInnerRML(escape(dusk::i18n::tr("prelaunch.update.available")));
             if (mUpdateDownloadLabel != nullptr) {
-                mUpdateDownloadLabel->SetInnerRML(escape(
-                    fmt::format("Download {}", update_release_label(sUpdateCheckResult->latest))));
+                mUpdateDownloadLabel->SetInnerRML(escape(dusk::i18n::tr_fmt(
+                    "prelaunch.update.download", update_release_label(sUpdateCheckResult->latest))));
             }
         } else {
             mUpdateStatus->SetAttribute("state", "failed");
-            mUpdateMessage->SetInnerRML("Failed to check for updates");
+            mUpdateMessage->SetInnerRML(escape(dusk::i18n::tr("prelaunch.update.failed")));
         }
     }
 

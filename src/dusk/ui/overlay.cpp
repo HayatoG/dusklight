@@ -4,6 +4,7 @@
 #include "dusk/achievements.h"
 #include "dusk/action_bindings.h"
 #include "controller_config.hpp"
+#include "dusk/i18n.hpp"
 #include "dusk/livesplit.h"
 #include "dusk/settings.h"
 #include "dusk/speedrun.h"
@@ -106,13 +107,13 @@ Rml::Element* create_controller_warning(Rml::Element* parent) {
 
     auto* heading = append(elem, "heading");
     auto* title = append(heading, "span");
-    title->SetInnerRML("No Device Assigned");
+    title->SetInnerRML(dusk::i18n::tr("overlay.no_device_assigned"));
     auto* icon = append(heading, "icon");
     icon->SetClass("warning", true);
 
     auto* message = append(elem, "message");
     auto* content = append(message, "span");
-    content->SetInnerRML("Configure <b>Port 1</b> in Settings.");
+    content->SetInnerRML(dusk::i18n::tr("overlay.configure_port"));
 
     return elem;
 }
@@ -148,9 +149,9 @@ Rml::String back_button_name() {
 }
 
 #if defined(TARGET_ANDROID) || (defined(__APPLE__) && TARGET_OS_IOS && !TARGET_OS_MACCATALYST)
-constexpr auto kMenuNotificationPrefix = "3-finger tap or";
+constexpr auto kMenuNotificationPrefixKey = "overlay.menu_notification_prefix_touch";
 #else
-constexpr auto kMenuNotificationPrefix = "Press <b>F1</b> or";
+constexpr auto kMenuNotificationPrefixKey = "overlay.menu_notification_prefix_key";
 #endif
 
 Rml::Element* create_menu_notification(Rml::Element* parent) {
@@ -169,11 +170,11 @@ Rml::Element* create_menu_notification(Rml::Element* parent) {
 
     auto* message = append(elem, "message");
     auto* row = append(message, "row");
-    append(row, "span")->SetInnerRML(kMenuNotificationPrefix);
+    append(row, "span")->SetInnerRML(dusk::i18n::tr(kMenuNotificationPrefixKey));
     auto* icon = append(row, "icon");
     icon->SetClass("controller", true);
     append(row, "span")->SetInnerRML("<b>" + escape(padButton) + "</b>");
-    append(row, "span")->SetInnerRML("to open menu");
+    append(row, "span")->SetInnerRML(dusk::i18n::tr("overlay.to_open_menu"));
 
     return elem;
 }
@@ -252,7 +253,7 @@ void Overlay::update() {
                 static_cast<double>(now - mFpsLastUpdate) >= 0.5 * static_cast<double>(perfFreq);
             if (refreshLabel) {
                 mFpsLastUpdate = now;
-                mFpsCounter->SetInnerRML(escape(fmt::format("{:.0f} FPS", fps)));
+                mFpsCounter->SetInnerRML(escape(dusk::i18n::tr_fmt("overlay.fps", fps)));
             }
         } else {
             mFpsCounter->RemoveAttribute("open");
@@ -278,7 +279,7 @@ void Overlay::update() {
                 mPipelineLastUpdate = now;
                 const uint32_t done = stats->createdPipelines;
                 const uint32_t total = done + stats->queuedPipelines;
-                mPipelineCompilation->SetInnerRML(escape(fmt::format("Compiling shaders… {}/{}", done, total)));
+                mPipelineCompilation->SetInnerRML(escape(dusk::i18n::tr_fmt("overlay.compiling_shaders", done, total)));
             }
         } else {
             mPipelineCompilation->RemoveAttribute("open");
@@ -290,10 +291,10 @@ void Overlay::update() {
     if (getSettings().game.speedrunMode && getSettings().game.liveSplitEnabled) {
         dusk::speedrun::updateLiveSplit();
         if (dusk::speedrun::consumeConnectedEvent()) {
-            push_toast({.title = "LiveSplit connected", .duration = std::chrono::seconds(3)});
+            push_toast({.title = dusk::i18n::tr("overlay.livesplit_connected"), .duration = std::chrono::seconds(3)});
         }
         if (dusk::speedrun::consumeDisconnectedEvent()) {
-            push_toast({.title = "LiveSplit disconnected", .duration = std::chrono::seconds(3)});
+            push_toast({.title = dusk::i18n::tr("overlay.livesplit_disconnected"), .duration = std::chrono::seconds(3)});
         }
     }
 #endif
@@ -332,12 +333,12 @@ void Overlay::update() {
 
             if (getSettings().game.showSpeedrunRTATimer) {
                 mSpeedrunRta->SetAttribute("open", "");
-                mSpeedrunRta->SetInnerRML(escape(fmt::format("RTA  {}", FormatTime(elapsedTime))));
+                mSpeedrunRta->SetInnerRML(escape(dusk::i18n::tr_fmt("overlay.rta", FormatTime(elapsedTime))));
             } else {
                 mSpeedrunRta->RemoveAttribute("open");
             }
 
-            mSpeedrunIgt->SetInnerRML(escape(fmt::format("IGT  {}", FormatTime(m_speedrunInfo.m_igtTimer))));
+            mSpeedrunIgt->SetInnerRML(escape(dusk::i18n::tr_fmt("overlay.igt", FormatTime(m_speedrunInfo.m_igtTimer))));
         } else {
             mSpeedrunTimer->RemoveAttribute("open");
         }
