@@ -449,7 +449,7 @@ SelectButton& config_percent_select(Pane& leftPane, Pane& rightPane, ConfigVar<f
         .setValue =
             [&var, min, max](int value) {
                 var.setValue(std::clamp(value, min, max) / 100.0f);
-                config::Save();
+                config::SaveDeferred();
             },
         .isDisabled = std::move(isDisabled),
         .isModified = [&var] { return var.getValue() != var.getDefaultValue(); },
@@ -476,7 +476,7 @@ SelectButton& config_int_select(Pane& leftPane, Pane& rightPane, ConfigVar<int>&
             [&var, min, max, callback = std::move(onChange)](int value) {
                 const int clampedValue = std::clamp(value, min, max);
                 var.setValue(clampedValue);
-                config::Save();
+                config::SaveDeferred();
                 if (callback) {
                     callback(clampedValue);
                 }

@@ -233,6 +233,8 @@ void update() noexcept {
     }
 
     input::update_input();
+    // Commit any debounced config write (e.g. after the user lets go of a held value slider).
+    dusk::config::FlushDeferredSave();
     const auto update_documents = [](auto& documents) {
         const std::size_t count = documents.size();
         for (std::size_t i = 0; i < count && i < documents.size(); ++i) {

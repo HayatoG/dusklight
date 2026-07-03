@@ -7,6 +7,7 @@
 #include "dusk/io.hpp"
 #include "dusk/settings.h"
 
+#include <chrono>
 #include <cmath>
 #include <filesystem>
 #include <limits>
@@ -476,7 +477,33 @@ void dusk::config::LoadFromFileName(const char* path) {
     }
 }
 
+namespace {
+// Debounced-save state. Holding a value slider mutates the CVar ~20x/second; Save() serialises the
+// whole config and does a temp-write + ReplaceFile (remove+rename on the Switch FsFs), so saving on
+// every step thrashes the SD and makes the hold feel stuck. SaveDeferred() marks dirty and
+// FlushDeferredSave() (pumped each frame) commits one write once the user stops adjusting.
+bool sDeferredSaveDirty = false;
+std::chrono::steady_clock::time_point sDeferredSaveAt{};
+constexpr auto kDeferredSaveIdle = std::chrono::milliseconds(300);
+}  // namespace
+
+void dusk::config::SaveDeferred() {
+    sDeferredSaveDirty = true;
+    sDeferredSaveAt = std::chrono::steady_clock::now();
+}
+
+void dusk::config::FlushDeferredSave(bool force) {
+    if (!sDeferredSaveDirty) {
+        return;
+    }
+    if (!force && std::chrono::steady_clock::now() - sDeferredSaveAt < kDeferredSaveIdle) {
+        return;
+    }
+    Save();  // clears sDeferredSaveDirty
+}
+
 void dusk::config::Save() {
+    sDeferredSaveDirty = false;  // a full write satisfies any pending deferred save
     const auto configJsonPath = GetConfigJsonPath();
     if (configJsonPath.empty()) {
         return;
