@@ -8,7 +8,7 @@ cd /dusklight/build-switch || exit 1
 exec > make_nro.log 2>&1          # all output to a log file (avoids PowerShell buffering games)
 set -x
 echo "elf size: $(du -h dusklight.elf | cut -f1)"
-nacptool --create "Dusklight" "TwilitRealm" "v1.4.2" dusklight.nacp
+nacptool --create "Dusklight" "TwilitRealm" "v1.4.3" dusklight.nacp
 echo "nacptool rc=$?"
 ICON=/dusklight/platforms/switch/icon.jpg
 # Bundle res/ as romfs so the launcher UI (fonts, .rcss stylesheets, logo.png)
