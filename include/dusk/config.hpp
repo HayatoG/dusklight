@@ -106,6 +106,19 @@ void LoadFromFileName(const char* path);
 void Save();
 
 /**
+ * \brief Request a save, debounced. Use for rapid mutations (e.g. holding a slider) so a burst of
+ * changes collapses into a single disk write instead of thrashing the SD card. The value is already
+ * live in memory; only the disk write is deferred. Pump FlushDeferredSave() each frame to commit it.
+ */
+void SaveDeferred();
+
+/**
+ * \brief Commit a pending SaveDeferred() once enough idle time has elapsed (or immediately when
+ * force is true). Cheap no-op when nothing is dirty, so it is safe to call every frame.
+ */
+void FlushDeferredSave(bool force = false);
+
+/**
  * \brief Get a registered CVar by name.
  *
  * @return null if the CVar does not exist.
