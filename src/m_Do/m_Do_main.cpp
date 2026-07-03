@@ -72,6 +72,7 @@ extern "C" void dusk_switch_log(const char*);
 #include "dusk/ui/prelaunch.hpp"
 #include "dusk/ui/preset.hpp"
 #include "dusk/ui/ui.hpp"
+#include "dusk/texture_replacements.hpp"
 #include "version.h"
 
 #include <aurora/aurora.h>
@@ -687,6 +688,11 @@ int game_main(int argc, char* argv[]) {
         config.allowTextureDumps = false;
         auroraInfo = aurora_initialize(argc, argv, &config);
     }
+
+    // Register the user's texture-replacement directory from the saved config. Without this the
+    // setting persists as enabled but the pack is only ever loaded by the settings-UI toggle
+    // (set_enabled -> reload), so a fresh boot renders vanilla until the user re-toggles it.
+    dusk::texture_replacements::reload();
 
 #ifdef DUSK_DISCORD
     if (dusk::getSettings().game.enableDiscordPresence) {
